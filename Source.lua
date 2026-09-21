@@ -45,12 +45,6 @@ local Library = {
         PositionX = 0;
         PositionY = 40;
     };
-    NotifyCenterConfig = {
-        VerticalSide = 'Bottom';
-        BarSide      = 'Top';
-        OffsetY      = 20;
-        PositionX    = 0.5;
-    };
 };
 _G.UIUnlocked = false;
 Library.KeyPickerList = {};
@@ -2882,41 +2876,13 @@ Library.NotifLayoutBottom = Library:Create('UIListLayout', {
     HorizontalAlignment = Enum.HorizontalAlignment.Center;
     Parent = Library.NotificationAreaBottom;
 });
-
-local function Library_UpdateNotifyCenterAlignment()
-    local cfg = Library.NotifyCenterConfig or {}
-    local side = cfg.VerticalSide or 'Bottom'
-    local offset = cfg.OffsetY or 20
-    local posX = cfg.PositionX
-    if type(posX) ~= 'number' then posX = 0.5 end
-
-    local area = Library.NotificationAreaBottom
-    local layout = Library.NotifLayoutBottom
-
-    if side == 'Top' then
-        area.AnchorPoint = Vector2.new(posX, 0)
-        area.Position = UDim2.new(posX, 0, 0, offset)
-        layout.VerticalAlignment = Enum.VerticalAlignment.Top
-    else
-        area.AnchorPoint = Vector2.new(posX, 1)
-        area.Position = UDim2.new(posX, 0, 1, -offset)
-        layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-    end
-end
-Library.UpdateNotifyCenterAlignment = Library_UpdateNotifyCenterAlignment
-Library_UpdateNotifyCenterAlignment()
-
 function Library:NotifyBottomCenter(Text, Time)
-    local cfg = Library.NotifyCenterConfig or {}
-    local barSide = cfg.BarSide or 'Top'
-
     local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
     YSize = YSize + 7
     local BAR_THICK = 3
     local finalWidth = XSize + 8 + 4
     local maxWidth = 300
     if finalWidth > maxWidth then finalWidth = maxWidth end
-
     local Wrap = Library:Create('Frame', {
         BackgroundTransparency = 1;
         Size = UDim2.new(1, 0, 0, YSize);
@@ -2945,21 +2911,11 @@ function Library:NotifyBottomCenter(Text, Time)
         BackgroundColor3 = 'MainColor';
         BorderColor3 = 'OutlineColor';
     }, true);
-
-    local innerPosY, innerSizeH
-    if barSide == 'Bottom' then
-        innerPosY = 1
-        innerSizeH = -(BAR_THICK + 2)
-    else
-        innerPosY = BAR_THICK + 1
-        innerSizeH = -(BAR_THICK + 2)
-    end
-
     local InnerFrame = Library:Create('Frame', {
         BackgroundColor3 = Color3.new(1, 1, 1);
         BorderSizePixel = 0;
-        Position = UDim2.new(0, 1, 0, innerPosY);
-        Size = UDim2.new(1, -2, 1, innerSizeH);
+        Position = UDim2.new(0, 1, 0, BAR_THICK + 1);
+        Size = UDim2.new(1, -2, 1, -(BAR_THICK + 2));
         ZIndex = 102;
         Parent = NotifyInner;
     });
@@ -2988,24 +2944,17 @@ function Library:NotifyBottomCenter(Text, Time)
         ZIndex = 103;
         Parent = InnerFrame;
     });
-
     local AccentBar = Library:Create('Frame', {
         BackgroundColor3 = Library.AccentColor;
         BorderSizePixel = 0;
+        Position = UDim2.new(0, -1, 0, -1);
+        Size = UDim2.new(1, 2, 0, BAR_THICK);
         ZIndex = 104;
         Parent = NotifyOuter;
     });
-    if barSide == 'Bottom' then
-        AccentBar.Position = UDim2.new(0, -1, 1, -BAR_THICK + 1)
-        AccentBar.Size = UDim2.new(1, 2, 0, BAR_THICK)
-    else
-        AccentBar.Position = UDim2.new(0, -1, 0, -1)
-        AccentBar.Size = UDim2.new(1, 2, 0, BAR_THICK)
-    end
     Library:AddToRegistry(AccentBar, {
         BackgroundColor3 = 'AccentColor';
     }, true);
-
     local tweenIn = TweenService:Create(NotifyOuter,
         TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         {Size = UDim2.new(0, finalWidth, 0, YSize)}
