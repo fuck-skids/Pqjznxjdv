@@ -45,6 +45,14 @@ local Library = {
         PositionX = 0;
         PositionY = 40;
     };
+    
+    NotifyBottomConfig = {
+        PositionX = 0;       
+        PositionY = -20;     
+        BarSide = 'Top';     
+        AppearFrom = 'Top';  
+        Transparency = 0;    
+    };
 };
 _G.UIUnlocked = false;
 Library.KeyPickerList = {};
@@ -2861,7 +2869,7 @@ do
 end
 Library.NotificationAreaBottom = Library:Create('Frame', {
     BackgroundTransparency = 1;
-    Position = UDim2.new(0.5, 0, 1, -20);
+    Position = UDim2.new(0.5, Library.NotifyBottomConfig.PositionX or 0, 1, Library.NotifyBottomConfig.PositionY or -20);
     AnchorPoint = Vector2.new(0.5, 1);
     Size = UDim2.new(0, 300, 0, 0);
     AutomaticSize = Enum.AutomaticSize.Y;
@@ -2876,31 +2884,90 @@ Library.NotifLayoutBottom = Library:Create('UIListLayout', {
     HorizontalAlignment = Enum.HorizontalAlignment.Center;
     Parent = Library.NotificationAreaBottom;
 });
-function Library:NotifyBottomCenter(Text, Time)
+
+function Library:UpdateNotifyBottomArea()
+    local cfg = Library.NotifyBottomConfig or {}
+    local area = Library.NotificationAreaBottom
+    if not area then return end
+    area.Position = UDim2.new(0.5, cfg.PositionX or 0, 1, cfg.PositionY or -20)
+end
+
+function Library:NotifyBottomCenter(Text, Time, Settings)
+    
+    
+    
+    
+    
+    local base = Library.NotifyBottomConfig or {}
+    local cfg = {}
+    for k, v in pairs(base) do cfg[k] = v end
+    if type(Time) == 'table' and Settings == nil then
+        
+        Settings = Time
+        Time = Settings.Time or Settings.Duration
+    end
+    if type(Settings) == 'table' then
+        for k, v in pairs(Settings) do
+            if v ~= nil then cfg[k] = v end
+        end
+    end
+
+    local posX = cfg.PositionX or 0
+    local posY = cfg.PositionY or -20
+    local barSide = cfg.BarSide or 'Top'
+    if barSide ~= 'Bottom' then barSide = 'Top' end
+    local appearFrom = cfg.AppearFrom or 'Top'
+    if appearFrom ~= 'Bottom' then appearFrom = 'Top' end
+    local transparency = tonumber(cfg.Transparency) or 0
+    transparency = math.clamp(transparency, 0, 1)
+
+    
+    local area = Library.NotificationAreaBottom
+    local prevPos = area and area.Position
+    if area then
+        area.Position = UDim2.new(0.5, posX, 1, posY)
+    end
+
     local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
     YSize = YSize + 7
     local BAR_THICK = 3
     local finalWidth = XSize + 8 + 4
     local maxWidth = 300
     if finalWidth > maxWidth then finalWidth = maxWidth end
+
     local Wrap = Library:Create('Frame', {
         BackgroundTransparency = 1;
         Size = UDim2.new(1, 0, 0, YSize);
         ZIndex = 100;
         Parent = Library.NotificationAreaBottom;
     });
+
+    
+    local outerAnchor
+    local outerPos
+    if appearFrom == 'Bottom' then
+        outerAnchor = Vector2.new(0.5, 1)
+        outerPos = UDim2.new(0.5, 0, 1, 0)
+    else
+        outerAnchor = Vector2.new(0.5, 0)
+        outerPos = UDim2.new(0.5, 0, 0, 0)
+    end
+
     local NotifyOuter = Library:Create('Frame', {
-        AnchorPoint = Vector2.new(0.5, 0.5);
-        Position = UDim2.new(0.5, 0, 0.5, 0);
+        AnchorPoint = outerAnchor;
+        Position = outerPos;
         BackgroundColor3 = Color3.new(0, 0, 0);
         BorderColor3 = Color3.new(0, 0, 0);
-        Size = UDim2.new(0, 0, 0, YSize);
+        BackgroundTransparency = transparency;
+        Size = UDim2.new(0, finalWidth, 0, 0); 
         ClipsDescendants = true;
         ZIndex = 100;
         Parent = Wrap;
     });
+
     local NotifyInner = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
+        BackgroundTransparency = transparency;
         BorderColor3 = Library.OutlineColor;
         BorderMode = Enum.BorderMode.Inset;
         Size = UDim2.new(1, 0, 1, 0);
@@ -2911,14 +2978,20 @@ function Library:NotifyBottomCenter(Text, Time)
         BackgroundColor3 = 'MainColor';
         BorderColor3 = 'OutlineColor';
     }, true);
+
+    local innerPosY = (barSide == 'Top') and (BAR_THICK + 1) or 1
+    local innerSizeH = -(BAR_THICK + 2)
+
     local InnerFrame = Library:Create('Frame', {
         BackgroundColor3 = Color3.new(1, 1, 1);
+        BackgroundTransparency = transparency;
         BorderSizePixel = 0;
-        Position = UDim2.new(0, 1, 0, BAR_THICK + 1);
-        Size = UDim2.new(1, -2, 1, -(BAR_THICK + 2));
+        Position = UDim2.new(0, 1, 0, innerPosY);
+        Size = UDim2.new(1, -2, 1, innerSizeH);
         ZIndex = 102;
         Parent = NotifyInner;
     });
+
     local Gradient = Library:Create('UIGradient', {
         Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
@@ -2935,6 +3008,7 @@ function Library:NotifyBottomCenter(Text, Time)
             });
         end
     });
+
     local NotifyLabel = Library:CreateLabel({
         Position = UDim2.new(0, 4, 0, 0);
         Size = UDim2.new(1, -8, 1, 0);
@@ -2944,10 +3018,18 @@ function Library:NotifyBottomCenter(Text, Time)
         ZIndex = 103;
         Parent = InnerFrame;
     });
+
+    local barPos
+    if barSide == 'Bottom' then
+        barPos = UDim2.new(0, -1, 1, -(BAR_THICK - 1))
+    else
+        barPos = UDim2.new(0, -1, 0, -1)
+    end
+
     local AccentBar = Library:Create('Frame', {
         BackgroundColor3 = Library.AccentColor;
         BorderSizePixel = 0;
-        Position = UDim2.new(0, -1, 0, -1);
+        Position = barPos;
         Size = UDim2.new(1, 2, 0, BAR_THICK);
         ZIndex = 104;
         Parent = NotifyOuter;
@@ -2955,21 +3037,29 @@ function Library:NotifyBottomCenter(Text, Time)
     Library:AddToRegistry(AccentBar, {
         BackgroundColor3 = 'AccentColor';
     }, true);
+
     local tweenIn = TweenService:Create(NotifyOuter,
         TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        {Size = UDim2.new(0, finalWidth, 0, YSize)}
+        { Size = UDim2.new(0, finalWidth, 0, YSize) }
     )
     tweenIn:Play()
+
     task.spawn(function()
         wait(Time or 5)
         local tweenOut = TweenService:Create(NotifyOuter,
             TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-            {Size = UDim2.new(0, 0, 0, YSize)}
+            { Size = UDim2.new(0, finalWidth, 0, 0) }
         )
         tweenOut:Play()
         tweenOut.Completed:Wait()
         Wrap:Destroy()
+        
+        if area and prevPos then
+            local c = Library.NotifyBottomConfig or {}
+            area.Position = UDim2.new(0.5, c.PositionX or 0, 1, c.PositionY or -20)
+        end
     end)
+end
 end
 do
     local WatermarkOuter = Library:Create('Frame', {
