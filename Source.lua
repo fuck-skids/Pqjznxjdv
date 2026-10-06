@@ -1056,7 +1056,7 @@ do
         local DisplayLabel = Library:CreateLabel({
             Size = UDim2.new(1, 0, 1, 0);
             TextSize = Library.FontSize - 1;
-            Text = Info.Default;
+            Text = (Info.Default == 'None' or Info.Default == '' or Info.Default == '--') and '…' or Info.Default;
             TextWrapped = true;
             ZIndex = 8;
             Parent = PickInner;
@@ -1187,7 +1187,7 @@ do
                 return;
             end;
             local State = KeyPicker:GetState();
-            local displayKey = (KeyPicker.Value == 'None') and '...' or KeyPicker.Value
+            local displayKey = (KeyPicker.Value == 'None' or KeyPicker.Value == '' or KeyPicker.Value == '--') and '…' or KeyPicker.Value
             ContainerLabel.Text = string.format('[%s] %s (%s)', displayKey, Info.Text, KeyPicker.Mode);
             local kbMode = Library.KeybindMode or 'All'
             if kbMode == 'Active' then
@@ -1241,7 +1241,7 @@ do
         end;
         function KeyPicker:SetValue(Data)
             local Key, Mode = Data[1], Data[2];
-            DisplayLabel.Text = Key;
+            DisplayLabel.Text = (Key == 'None' or Key == '' or Key == '--') and '…' or Key;
             KeyPicker.Value = Key;
             ModeButtons[Mode]:Select();
             KeyPicker:Update();
@@ -1280,10 +1280,11 @@ do
             local Text = '';
             task.spawn(function()
                 while (not Break) do
-                    if Text == '...' then
+                    if Text == '…' then
                         Text = '';
                     end;
                     Text = Text .. '.';
+                    if Text == '...' then Text = '…' end
                     DisplayLabel.Text = Text;
                     wait(0.4);
                 end;
@@ -2354,20 +2355,26 @@ do
             Rotation = 90;
             Parent = DropdownInner;
         });
-        local DropdownArrow = Library:Create('ImageLabel', {
-            AnchorPoint = Vector2.new(0, 0.5);
+        local DropdownArrow = Library:CreateLabel({
+            AnchorPoint = Vector2.new(0.5, 0.5);
             BackgroundTransparency = 1;
-            Position = UDim2.new(1, -16, 0.5, 0);
-            Size = UDim2.new(0, 12, 0, 12);
-            Image = 'http://www.roblox.com/asset/?id=6282522798';
+            Position = UDim2.new(1, -10, 0.5, 0);
+            Size = UDim2.new(0, 16, 0, 16);
+            Text = '>';
+            TextSize = Library.FontSize;
+            TextXAlignment = Enum.TextXAlignment.Center;
+            TextYAlignment = Enum.TextYAlignment.Center;
             ZIndex = 8;
             Parent = DropdownInner;
         });
+        Library:AddToRegistry(DropdownArrow, {
+            TextColor3 = 'FontColor';
+        });
         local ItemList = Library:CreateLabel({
             Position = UDim2.new(0, 5, 0, 0);
-            Size = UDim2.new(1, -5, 1, 0);
+            Size = UDim2.new(1, -22, 1, 0);
             TextSize = Library.FontSize;
-            Text = '--';
+            Text = '…';
             TextXAlignment = Enum.TextXAlignment.Left;
             TextWrapped = true;
             ZIndex = 7;
@@ -2444,7 +2451,7 @@ do
             else
                 Str = Dropdown.Value or '';
             end;
-            ItemList.Text = (Str == '' and '--' or Str);
+            ItemList.Text = (Str == '' and '…' or Str);
         end;
         function Dropdown:GetActiveValues()
             if Info.Multi then
@@ -2559,12 +2566,12 @@ do
         function Dropdown:OpenDropdown()
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
-            DropdownArrow.Rotation = 180;
+            DropdownArrow.Rotation = 90; 
         end;
         function Dropdown:CloseDropdown()
             ListOuter.Visible = false;
             Library.OpenedFrames[ListOuter] = nil;
-            DropdownArrow.Rotation = 0;
+            DropdownArrow.Rotation = 0; 
         end;
         function Dropdown:OnChanged(Func)
             Dropdown.Changed = Func;
