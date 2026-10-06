@@ -2566,12 +2566,12 @@ do
         function Dropdown:OpenDropdown()
             ListOuter.Visible = true;
             Library.OpenedFrames[ListOuter] = true;
-            DropdownArrow.Rotation = -90; -- > points up when open
+            DropdownArrow.Rotation = 90; 
         end;
         function Dropdown:CloseDropdown()
             ListOuter.Visible = false;
             Library.OpenedFrames[ListOuter] = nil;
-            DropdownArrow.Rotation = 0; -- > points right when closed
+            DropdownArrow.Rotation = 0; 
         end;
         function Dropdown:OnChanged(Func)
             Dropdown.Changed = Func;
