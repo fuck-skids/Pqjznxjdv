@@ -1056,7 +1056,7 @@ do
         local DisplayLabel = Library:CreateLabel({
             Size = UDim2.new(1, 0, 1, 0);
             TextSize = Library.FontSize - 1;
-            Text = (Info.Default == 'None' or Info.Default == '' or Info.Default == '--') and '. . .' or Info.Default;
+            Text = (Info.Default == 'None' or Info.Default == '' or Info.Default == '--') and '…' or Info.Default;
             TextWrapped = true;
             ZIndex = 8;
             Parent = PickInner;
@@ -1187,7 +1187,7 @@ do
                 return;
             end;
             local State = KeyPicker:GetState();
-            local displayKey = (KeyPicker.Value == 'None' or KeyPicker.Value == '' or KeyPicker.Value == '--') and '. . .' or KeyPicker.Value
+            local displayKey = (KeyPicker.Value == 'None' or KeyPicker.Value == '' or KeyPicker.Value == '--') and '…' or KeyPicker.Value
             ContainerLabel.Text = string.format('[%s] %s (%s)', displayKey, Info.Text, KeyPicker.Mode);
             local kbMode = Library.KeybindMode or 'All'
             if kbMode == 'Active' then
@@ -1241,7 +1241,7 @@ do
         end;
         function KeyPicker:SetValue(Data)
             local Key, Mode = Data[1], Data[2];
-            DisplayLabel.Text = (Key == 'None' or Key == '' or Key == '--') and '. . .' or Key;
+            DisplayLabel.Text = (Key == 'None' or Key == '' or Key == '--') and '…' or Key;
             KeyPicker.Value = Key;
             ModeButtons[Mode]:Select();
             KeyPicker:Update();
@@ -1280,15 +1280,11 @@ do
             local Text = '';
             task.spawn(function()
                 while (not Break) do
-                    if Text == '. . .' then
-                        Text = '.'
-                    elseif Text == '.' then
-                        Text = '. .'
-                    elseif Text == '. .' then
-                        Text = '. . .'
-                    else
-                        Text = '.'
-                    end
+                    if Text == '…' then
+                        Text = '';
+                    end;
+                    Text = Text .. '.';
+                    if Text == '...' then Text = '…' end
                     DisplayLabel.Text = Text;
                     wait(0.4);
                 end;
@@ -2378,7 +2374,7 @@ do
             Position = UDim2.new(0, 5, 0, 0);
             Size = UDim2.new(1, -22, 1, 0);
             TextSize = Library.FontSize;
-            Text = '. . .';
+            Text = '…';
             TextXAlignment = Enum.TextXAlignment.Left;
             TextWrapped = true;
             ZIndex = 7;
@@ -2455,7 +2451,7 @@ do
             else
                 Str = Dropdown.Value or '';
             end;
-            ItemList.Text = (Str == '' and '. . .' or Str);
+            ItemList.Text = (Str == '' and '…' or Str);
         end;
         function Dropdown:GetActiveValues()
             if Info.Multi then
