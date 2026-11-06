@@ -1,4 +1,3 @@
-local Library = (function()
 local InputService = cloneref(game:GetService('UserInputService'));
 local TextService = cloneref(game:GetService('TextService'));
 local CoreGui = cloneref(game:GetService('CoreGui'));
@@ -4187,4 +4186,3 @@ if InputService.TouchEnabled then
 end
 getgenv().Library = Library
 return Library
-end)()
