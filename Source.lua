@@ -1,3 +1,4 @@
+local Library = (function()
 local InputService = cloneref(game:GetService('UserInputService'));
 local TextService = cloneref(game:GetService('TextService'));
 local CoreGui = cloneref(game:GetService('CoreGui'));
@@ -2023,12 +2024,32 @@ do
             Fill.BackgroundColor3 = Library.AccentColor;
             Fill.BorderColor3     = Library.AccentColorDark;
         end;
+        Slider.AnimTarget = 0;
+        Slider.AnimCurrent = 0;
+        Slider.AnimRunning = false;
+        function Slider:AnimateFill(TargetX)
+            TargetX = math.max(0, TargetX or 0);
+            Slider.AnimTarget = TargetX;
+            if Slider.AnimRunning then return end;
+            Slider.AnimRunning = true;
+            task.spawn(function()
+                while math.abs(Slider.AnimCurrent - Slider.AnimTarget) > 0.5 do
+                    Slider.AnimCurrent = Slider.AnimCurrent + (Slider.AnimTarget - Slider.AnimCurrent) * 0.25;
+                    Fill.Size = UDim2.new(0, math.floor(Slider.AnimCurrent), 1, 0);
+                    HideBorderRight.Visible = not (Slider.AnimCurrent >= Slider.MaxSize - 0.5 or Slider.AnimCurrent <= 0.5);
+                    RunService.Heartbeat:Wait();
+                end;
+                Slider.AnimCurrent = Slider.AnimTarget;
+                Fill.Size = UDim2.new(0, Slider.AnimTarget, 1, 0);
+                HideBorderRight.Visible = not (Slider.AnimTarget >= Slider.MaxSize or Slider.AnimTarget <= 0);
+                Slider.AnimRunning = false;
+            end);
+        end;
         function Slider:Display()
             local Suffix = Info.Suffix or '%';
             DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix;
             local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, Slider.MaxSize));
-            Fill.Size = UDim2.new(0, X, 1, 0);
-            HideBorderRight.Visible = not (X == Slider.MaxSize or X == 0);
+            Slider:AnimateFill(X);
         end;
         function Slider:OnChanged(Func)
             Slider.Changed = Func;
@@ -2204,13 +2225,33 @@ do
                 Fill.BorderColor3     = Library.AccentColorDark;
             end
 
+            Slider.AnimTarget = 0;
+            Slider.AnimCurrent = 0;
+            Slider.AnimRunning = false;
+            function Slider:AnimateFill(TargetX)
+                TargetX = math.max(0, TargetX or 0);
+                Slider.AnimTarget = TargetX;
+                if Slider.AnimRunning then return end;
+                Slider.AnimRunning = true;
+                task.spawn(function()
+                    while math.abs(Slider.AnimCurrent - Slider.AnimTarget) > 0.5 do
+                        Slider.AnimCurrent = Slider.AnimCurrent + (Slider.AnimTarget - Slider.AnimCurrent) * 0.25;
+                        Fill.Size = UDim2.new(0, math.floor(Slider.AnimCurrent), 1, 0);
+                        HideBorderRight.Visible = not (Slider.AnimCurrent >= GetMaxSize() - 0.5 or Slider.AnimCurrent <= 0.5);
+                        RunService.Heartbeat:Wait();
+                    end;
+                    Slider.AnimCurrent = Slider.AnimTarget;
+                    Fill.Size = UDim2.new(0, Slider.AnimTarget, 1, 0);
+                    HideBorderRight.Visible = not (Slider.AnimTarget >= GetMaxSize() or Slider.AnimTarget <= 0);
+                    Slider.AnimRunning = false;
+                end);
+            end;
             function Slider:Display()
                 local Suffix  = Info.Suffix or '%';
                 local maxSize = GetMaxSize();
                 DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix;
                 local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, maxSize));
-                Fill.Size = UDim2.new(0, X, 1, 0);
-                HideBorderRight.Visible = not (X == maxSize or X == 0);
+                Slider:AnimateFill(X);
             end
 
             function Slider:OnChanged(Func)
@@ -2402,13 +2443,33 @@ do
                 Fill.BorderColor3     = Library.AccentColorDark;
             end
 
+            Slider.AnimTarget = 0;
+            Slider.AnimCurrent = 0;
+            Slider.AnimRunning = false;
+            function Slider:AnimateFill(TargetX)
+                TargetX = math.max(0, TargetX or 0);
+                Slider.AnimTarget = TargetX;
+                if Slider.AnimRunning then return end;
+                Slider.AnimRunning = true;
+                task.spawn(function()
+                    while math.abs(Slider.AnimCurrent - Slider.AnimTarget) > 0.5 do
+                        Slider.AnimCurrent = Slider.AnimCurrent + (Slider.AnimTarget - Slider.AnimCurrent) * 0.25;
+                        Fill.Size = UDim2.new(0, math.floor(Slider.AnimCurrent), 1, 0);
+                        HideBorderRight.Visible = not (Slider.AnimCurrent >= GetMaxSize() - 0.5 or Slider.AnimCurrent <= 0.5);
+                        RunService.Heartbeat:Wait();
+                    end;
+                    Slider.AnimCurrent = Slider.AnimTarget;
+                    Fill.Size = UDim2.new(0, Slider.AnimTarget, 1, 0);
+                    HideBorderRight.Visible = not (Slider.AnimTarget >= GetMaxSize() or Slider.AnimTarget <= 0);
+                    Slider.AnimRunning = false;
+                end);
+            end;
             function Slider:Display()
                 local Suffix  = Info.Suffix or '%';
                 local maxSize = GetMaxSize();
                 DisplayLabel.Text = Info.Text .. ': ' .. Slider.Value .. Suffix;
                 local X = math.ceil(Library:MapValue(Slider.Value, Slider.Min, Slider.Max, 0, maxSize));
-                Fill.Size = UDim2.new(0, X, 1, 0);
-                HideBorderRight.Visible = not (X == maxSize or X == 0);
+                Slider:AnimateFill(X);
             end
 
             function Slider:OnChanged(Func)
@@ -4126,3 +4187,4 @@ if InputService.TouchEnabled then
 end
 getgenv().Library = Library
 return Library
+end)()
