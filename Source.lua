@@ -44,21 +44,6 @@ local Library = {
         BarSide   = 'Left';
         PositionX = 0;
         PositionY = 40;
-        PositionXPct = nil;
-        PositionYPct = 60;
-        Transparency = 25;
-        Duration = 5;
-        SortOrder = 'Default';
-        ForceColor = false;
-        ClipDescendants = true;
-        ClipDistance = 200;
-    };
-    NotifyCenterConfig = {
-        Transparency = 25;
-        Duration = 5;
-        PositionYPct = 85;
-        BarSide = 'Top';
-        ForceColor = false;
     };
     
 };
@@ -3006,105 +2991,30 @@ do
         VerticalAlignment = Enum.VerticalAlignment.Top;
         Parent = Library.NotificationArea;
     });
-    local function Library_GetNotifTransparency(cfg)
-        local t = tonumber(cfg and cfg.Transparency) or 0
-        if t < 0 then t = 0 end
-        if t > 100 then t = 100 end
-        return t / 100
-    end
-    Library.GetNotifTransparency = Library_GetNotifTransparency
-
     local function Library_UpdateNotifAlignment()
         local cfg = Library.NotifyConfig
         local area = Library.NotificationArea
         local layout = Library.NotifLayout
-        local cam = workspace.CurrentCamera
-        local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-        local posX, posY
-        if cfg.PositionXPct ~= nil then
-            posX = math.floor(vp.X * (tonumber(cfg.PositionXPct) or 0) / 100)
-        else
-            posX = tonumber(cfg.PositionX) or 0
-        end
-        if cfg.PositionYPct ~= nil then
-            posY = math.floor(vp.Y * (tonumber(cfg.PositionYPct) or 0) / 100)
-        else
-            posY = tonumber(cfg.PositionY) or 40
-        end
+        area.Position = UDim2.new(0, cfg.PositionX, 0, cfg.PositionY)
+        area.Size     = UDim2.new(0, 300, 1, -cfg.PositionY)
         local align = cfg.Alignment or 'Left'
         if align == 'Left' then
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
             area.AnchorPoint = Vector2.new(0, 0)
-            area.Position = UDim2.fromOffset(posX, posY)
         elseif align == 'Right' then
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-            area.AnchorPoint = Vector2.new(1, 0)
-            area.Position = UDim2.new(1, -posX, 0, posY)
+            area.AnchorPoint = Vector2.new(0, 0)
         elseif align == 'Center' then
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-            area.AnchorPoint = Vector2.new(0.5, 0)
-            area.Position = UDim2.new(0.5, 0, 0, posY)
-        else
             area.AnchorPoint = Vector2.new(0, 0)
-            area.Position = UDim2.fromOffset(posX, posY)
-        end
-        local clipH = tonumber(cfg.ClipDistance) or 200
-        if cfg.ClipDescendants then
-            area.ClipsDescendants = true
-            area.Size = UDim2.fromOffset(300, clipH)
-        else
-            area.ClipsDescendants = false
-            area.Size = UDim2.new(0, 300, 1, -posY)
         end
     end
     Library.UpdateNotifAlignment = Library_UpdateNotifAlignment
     Library_UpdateNotifAlignment()
-
-    function Library:UpdateNotifCenterArea()
-        local cfg = Library.NotifyCenterConfig or {}
-        local area = Library.NotificationAreaBottom
-        if not area then return end
-        local cam = workspace.CurrentCamera
-        local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-        local yPct = tonumber(cfg.PositionYPct) or 85
-        local y = math.floor(vp.Y * yPct / 100)
-        area.AnchorPoint = Vector2.new(0.5, 1)
-        area.Position = UDim2.new(0.5, 0, 0, y)
-        area.Size = UDim2.fromOffset(400, 200)
-    end
-    function Library:SetNotifyTransparency(v)
-        Library.NotifyConfig.Transparency = math.clamp(tonumber(v) or 0, 0, 100)
-    end
-    function Library:SetNotifyCenterTransparency(v)
-        Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
-        Library.NotifyCenterConfig.Transparency = math.clamp(tonumber(v) or 0, 0, 100)
-    end
-    function Library:SetNotifyDuration(v)
-        Library.NotifyConfig.Duration = math.max(0.1, tonumber(v) or 5)
-    end
-    function Library:SetNotifyCenterDuration(v)
-        Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
-        Library.NotifyCenterConfig.Duration = math.max(0.1, tonumber(v) or 5)
-    end
-    function Library:SetNotifyBarSide(side)
-        Library.NotifyConfig.BarSide = side or 'Left'
-    end
-    function Library:SetNotifyPositionPct(xPct, yPct)
-        if xPct ~= nil then Library.NotifyConfig.PositionXPct = xPct end
-        if yPct ~= nil then Library.NotifyConfig.PositionYPct = yPct end
-        Library.UpdateNotifAlignment()
-    end
-    function Library:SetNotifyCenterPositionPct(yPct)
-        Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
-        Library.NotifyCenterConfig.PositionYPct = yPct
-        if Library.UpdateNotifCenterArea then Library:UpdateNotifCenterArea() end
-    end
     function Library:Notify(Text, Time)
         local cfg     = Library.NotifyConfig
-        Time = Time or cfg.Duration or 5
         local barSide = cfg.BarSide   or 'Left'
         local align   = cfg.Alignment or 'Left'
-        local notifTransparency = Library.GetNotifTransparency(cfg)
         local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
         YSize = YSize + 7
         local BAR_THIN  = 3
@@ -3122,15 +3032,11 @@ do
             outerAnchor = Vector2.new(1, 0)
         end
         local childrenCount = #Library.NotificationArea:GetChildren()
-        local layoutOrder = childrenCount + 1
-        if cfg.SortOrder == 'Text Length' then
-            layoutOrder = math.floor(XSize)
-        end
         local NotifyOuter = Library:Create('Frame', {
             BackgroundTransparency = 1;
             AnchorPoint = outerAnchor;
             BorderColor3 = Color3.new(0, 0, 0);
-            LayoutOrder = layoutOrder;
+            LayoutOrder = childrenCount + 1;
             Size = UDim2.new(0, 0, 0, YSize);
             ClipsDescendants = true;
             ZIndex = 100;
@@ -3138,7 +3044,6 @@ do
         });
         local NotifyInner = Library:Create('Frame', {
             BackgroundColor3 = Library.MainColor;
-            BackgroundTransparency = notifTransparency;
             BorderColor3 = Library.OutlineColor;
             BorderMode = Enum.BorderMode.Inset;
             Size = UDim2.new(1, 0, 1, 0);
@@ -3239,12 +3144,6 @@ Library.NotifLayoutBottom = Library:Create('UIListLayout', {
     Parent = Library.NotificationAreaBottom;
 });
 function Library:NotifyBottomCenter(Text, Time)
-    local cfg = Library.NotifyCenterConfig or {}
-    Time = Time or cfg.Duration or 5
-    local notifTransparency = Library.GetNotifTransparency(cfg)
-    if Library.UpdateNotifCenterArea then
-        pcall(function() Library:UpdateNotifCenterArea() end)
-    end
     local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
     YSize = YSize + 7
     local BAR_THICK = 3
@@ -3269,7 +3168,6 @@ function Library:NotifyBottomCenter(Text, Time)
     });
     local NotifyInner = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
-        BackgroundTransparency = notifTransparency;
         BorderColor3 = Library.OutlineColor;
         BorderMode = Enum.BorderMode.Inset;
         Size = UDim2.new(1, 0, 1, 0);
