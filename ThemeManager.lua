@@ -298,7 +298,8 @@ local ThemeManager = {} do
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
-			}):AddSlider('SwordReflectance', {
+			})
+			backgroundTab:AddSlider('SwordReflectance', {
 				Text = 'Reflectance',
 				Default = 0,
 				Min = 0,
