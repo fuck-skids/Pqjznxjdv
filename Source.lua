@@ -39,11 +39,38 @@ local Library = {
     UseBlur = false;
     BlurSize = 15;
     KeybindMode = 'All';
+    ShowCustomCursor = true; -- UE default
+    KeybindMenuTransparency = 100; -- 0-100, UE-style (100 = fully opaque)
+    -- Menu 3D background (ViewportFrame + rotating item)
+    MenuBackgroundEnabled = true;
+    ItemType = 'None';           -- model/part name to show, or 'None'
+    SwordColor = Color3.fromRGB(255, 255, 255);
+    SwordMaterial = Enum.Material.Neon;
+    SwordTransparency = 0;
+    SwordReflectance = 0;
+    SwordSpeed = 0.15;           -- rotation speed (UE default)
+    BackColor = Color3.fromRGB(0, 0, 0);
+    BackTransparency = 0.7;
     NotifyConfig = {
         Alignment = 'Left';
         BarSide   = 'Left';
         PositionX = 0;
         PositionY = 40;
+        PositionXPct = nil;
+        PositionYPct = 60;
+        Transparency = 25;
+        Duration = 5;
+        SortOrder = 'Default';
+        ForceColor = false;
+        ClipDescendants = true;
+        ClipDistance = 200;
+    };
+    NotifyCenterConfig = {
+        Transparency = 25;
+        Duration = 5;
+        PositionYPct = 85;
+        BarSide = 'Top';
+        ForceColor = false;
     };
     
 };
@@ -2991,30 +3018,105 @@ do
         VerticalAlignment = Enum.VerticalAlignment.Top;
         Parent = Library.NotificationArea;
     });
+    local function Library_GetNotifTransparency(cfg)
+        local t = tonumber(cfg and cfg.Transparency) or 0
+        if t < 0 then t = 0 end
+        if t > 100 then t = 100 end
+        return t / 100
+    end
+    Library.GetNotifTransparency = Library_GetNotifTransparency
+
     local function Library_UpdateNotifAlignment()
         local cfg = Library.NotifyConfig
         local area = Library.NotificationArea
         local layout = Library.NotifLayout
-        area.Position = UDim2.new(0, cfg.PositionX, 0, cfg.PositionY)
-        area.Size     = UDim2.new(0, 300, 1, -cfg.PositionY)
+        local cam = workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+        local posX, posY
+        if cfg.PositionXPct ~= nil then
+            posX = math.floor(vp.X * (tonumber(cfg.PositionXPct) or 0) / 100)
+        else
+            posX = tonumber(cfg.PositionX) or 0
+        end
+        if cfg.PositionYPct ~= nil then
+            posY = math.floor(vp.Y * (tonumber(cfg.PositionYPct) or 0) / 100)
+        else
+            posY = tonumber(cfg.PositionY) or 40
+        end
         local align = cfg.Alignment or 'Left'
         if align == 'Left' then
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
             area.AnchorPoint = Vector2.new(0, 0)
+            area.Position = UDim2.fromOffset(posX, posY)
         elseif align == 'Right' then
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-            area.AnchorPoint = Vector2.new(0, 0)
+            area.AnchorPoint = Vector2.new(1, 0)
+            area.Position = UDim2.new(1, -posX, 0, posY)
         elseif align == 'Center' then
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            area.AnchorPoint = Vector2.new(0.5, 0)
+            area.Position = UDim2.new(0.5, 0, 0, posY)
+        else
             area.AnchorPoint = Vector2.new(0, 0)
+            area.Position = UDim2.fromOffset(posX, posY)
+        end
+        local clipH = tonumber(cfg.ClipDistance) or 200
+        if cfg.ClipDescendants then
+            area.ClipsDescendants = true
+            area.Size = UDim2.fromOffset(300, clipH)
+        else
+            area.ClipsDescendants = false
+            area.Size = UDim2.new(0, 300, 1, -posY)
         end
     end
     Library.UpdateNotifAlignment = Library_UpdateNotifAlignment
     Library_UpdateNotifAlignment()
+
+    function Library:UpdateNotifCenterArea()
+        local cfg = Library.NotifyCenterConfig or {}
+        local area = Library.NotificationAreaBottom
+        if not area then return end
+        local cam = workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+        local yPct = tonumber(cfg.PositionYPct) or 85
+        local y = math.floor(vp.Y * yPct / 100)
+        area.AnchorPoint = Vector2.new(0.5, 1)
+        area.Position = UDim2.new(0.5, 0, 0, y)
+        area.Size = UDim2.fromOffset(400, 200)
+    end
+    function Library:SetNotifyTransparency(v)
+        Library.NotifyConfig.Transparency = math.clamp(tonumber(v) or 0, 0, 100)
+    end
+    function Library:SetNotifyCenterTransparency(v)
+        Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
+        Library.NotifyCenterConfig.Transparency = math.clamp(tonumber(v) or 0, 0, 100)
+    end
+    function Library:SetNotifyDuration(v)
+        Library.NotifyConfig.Duration = math.max(0.1, tonumber(v) or 5)
+    end
+    function Library:SetNotifyCenterDuration(v)
+        Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
+        Library.NotifyCenterConfig.Duration = math.max(0.1, tonumber(v) or 5)
+    end
+    function Library:SetNotifyBarSide(side)
+        Library.NotifyConfig.BarSide = side or 'Left'
+    end
+    function Library:SetNotifyPositionPct(xPct, yPct)
+        if xPct ~= nil then Library.NotifyConfig.PositionXPct = xPct end
+        if yPct ~= nil then Library.NotifyConfig.PositionYPct = yPct end
+        Library.UpdateNotifAlignment()
+    end
+    function Library:SetNotifyCenterPositionPct(yPct)
+        Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
+        Library.NotifyCenterConfig.PositionYPct = yPct
+        if Library.UpdateNotifCenterArea then Library:UpdateNotifCenterArea() end
+    end
     function Library:Notify(Text, Time)
         local cfg     = Library.NotifyConfig
+        Time = Time or cfg.Duration or 5
         local barSide = cfg.BarSide   or 'Left'
         local align   = cfg.Alignment or 'Left'
+        local notifTransparency = Library.GetNotifTransparency(cfg)
         local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
         YSize = YSize + 7
         local BAR_THIN  = 3
@@ -3032,11 +3134,15 @@ do
             outerAnchor = Vector2.new(1, 0)
         end
         local childrenCount = #Library.NotificationArea:GetChildren()
+        local layoutOrder = childrenCount + 1
+        if cfg.SortOrder == 'Text Length' then
+            layoutOrder = math.floor(XSize)
+        end
         local NotifyOuter = Library:Create('Frame', {
             BackgroundTransparency = 1;
             AnchorPoint = outerAnchor;
             BorderColor3 = Color3.new(0, 0, 0);
-            LayoutOrder = childrenCount + 1;
+            LayoutOrder = layoutOrder;
             Size = UDim2.new(0, 0, 0, YSize);
             ClipsDescendants = true;
             ZIndex = 100;
@@ -3044,6 +3150,7 @@ do
         });
         local NotifyInner = Library:Create('Frame', {
             BackgroundColor3 = Library.MainColor;
+            BackgroundTransparency = notifTransparency;
             BorderColor3 = Library.OutlineColor;
             BorderMode = Enum.BorderMode.Inset;
             Size = UDim2.new(1, 0, 1, 0);
@@ -3144,6 +3251,12 @@ Library.NotifLayoutBottom = Library:Create('UIListLayout', {
     Parent = Library.NotificationAreaBottom;
 });
 function Library:NotifyBottomCenter(Text, Time)
+    local cfg = Library.NotifyCenterConfig or {}
+    Time = Time or cfg.Duration or 5
+    local notifTransparency = Library.GetNotifTransparency(cfg)
+    if Library.UpdateNotifCenterArea then
+        pcall(function() Library:UpdateNotifCenterArea() end)
+    end
     local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
     YSize = YSize + 7
     local BAR_THICK = 3
@@ -3168,6 +3281,7 @@ function Library:NotifyBottomCenter(Text, Time)
     });
     local NotifyInner = Library:Create('Frame', {
         BackgroundColor3 = Library.MainColor;
+        BackgroundTransparency = notifTransparency;
         BorderColor3 = Library.OutlineColor;
         BorderMode = Enum.BorderMode.Inset;
         Size = UDim2.new(1, 0, 1, 0);
@@ -3350,9 +3464,39 @@ do
         Parent = KeybindContainer,
     })
     Library.KeybindFrame = KeybindOuter;
+    Library.KeybindInner = KeybindInner;
     Library.KeybindContainer = KeybindContainer;
     Library:MakeDraggable(KeybindOuter);
+
+    -- Apply initial transparency (UE: Transparency = 1 - slider/100)
+    local function applyKeybindTransparency(pct)
+        pct = math.clamp(tonumber(pct) or 100, 0, 100)
+        Library.KeybindMenuTransparency = pct
+        local t = 1 - (pct / 100) -- 100% -> 0 transparency (opaque)
+        pcall(function()
+            KeybindOuter.BackgroundTransparency = t
+            KeybindInner.BackgroundTransparency = t
+        end)
+    end
+    Library._ApplyKeybindTransparency = applyKeybindTransparency
+    applyKeybindTransparency(Library.KeybindMenuTransparency or 100)
 end
+
+function Library:SetKeybindMenuTransparency(pct)
+    if Library._ApplyKeybindTransparency then
+        Library._ApplyKeybindTransparency(pct)
+    else
+        Library.KeybindMenuTransparency = math.clamp(tonumber(pct) or 100, 0, 100)
+        local t = 1 - (Library.KeybindMenuTransparency / 100)
+        if Library.KeybindFrame then
+            pcall(function() Library.KeybindFrame.BackgroundTransparency = t end)
+        end
+        if Library.KeybindInner then
+            pcall(function() Library.KeybindInner.BackgroundTransparency = t end)
+        end
+    end
+end
+
 function Library:SetKeybindMode(Mode)
     assert(Mode == 'All' or Mode == 'Active' or Mode == 'Toggled',
         "SetKeybindMode: Mode must be 'All', 'Active', or 'Toggled'")
@@ -3536,6 +3680,186 @@ function Library:CreateWindow(...)
         BorderColor3 = 'OutlineColor';
     });
     Outer.ClipsDescendants = true;
+
+    -- ============================================================
+    -- Menu 3D background: ViewportFrame + rotating item (UE-style)
+    -- ============================================================
+    local MenuBgHolder = Library:Create('Frame', {
+        BackgroundTransparency = 1;
+        Size = UDim2.fromScale(1, 1);
+        ZIndex = 0;
+        ClipsDescendants = true;
+        Parent = Outer;
+    });
+    local MenuViewport = Library:Create('ViewportFrame', {
+        BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0);
+        BackgroundTransparency = Library.BackTransparency or 0.7;
+        Size = UDim2.fromScale(1, 1);
+        ZIndex = 0;
+        LightColor = Color3.fromRGB(255, 255, 255);
+        LightDirection = Vector3.new(-1, -1, -1);
+        Ambient = Color3.fromRGB(180, 180, 180);
+        Parent = MenuBgHolder;
+    });
+    Library:AddToRegistry(MenuViewport, {
+        BackgroundColor3 = 'BackColor';
+    });
+    local MenuWorld = Instance.new('WorldModel')
+    MenuWorld.Parent = MenuViewport
+
+    local MenuCam = Instance.new('Camera')
+    MenuCam.Parent = MenuViewport
+    MenuViewport.CurrentCamera = MenuCam
+    MenuCam.CFrame = CFrame.new(Vector3.new(0, 0, 6), Vector3.new(0, 0, 0))
+
+    local MenuBgState = {
+        Enabled = Library.MenuBackgroundEnabled ~= false;
+        Item = nil;
+        ItemName = Library.ItemType or 'None';
+        Conn = nil;
+        Source = nil; -- optional folder to search models in
+    }
+    Library.MenuBackground = MenuBgState
+    Library.MenuViewport = MenuViewport
+
+    local function styleBackgroundItem(obj)
+        if not obj then return end
+        local function stylePart(p)
+            if not p:IsA('BasePart') then return end
+            p.Color = Library.SwordColor or Color3.new(1,1,1)
+            p.Material = Library.SwordMaterial or Enum.Material.Neon
+            p.Transparency = Library.SwordTransparency or 0
+            p.Reflectance = Library.SwordReflectance or 0
+            p.Anchored = true
+            p.CanCollide = false
+            p.CastShadow = false
+        end
+        if obj:IsA('BasePart') then
+            stylePart(obj)
+        elseif obj:IsA('Model') then
+            for _, d in ipairs(obj:GetDescendants()) do
+                stylePart(d)
+            end
+        end
+    end
+
+    local function clearBackgroundItem()
+        if MenuBgState.Item then
+            pcall(function() MenuBgState.Item:Destroy() end)
+            MenuBgState.Item = nil
+        end
+    end
+
+    local function findSourceItem(name)
+        if not name or name == '' or name == 'None' then return nil end
+        -- 1) explicit source folder
+        if MenuBgState.Source then
+            local f = MenuBgState.Source:FindFirstChild(name, true)
+            if f then return f end
+        end
+        -- 2) common places
+        local places = {
+            game:GetService('ReplicatedStorage'),
+            game:GetService('ReplicatedStorage'):FindFirstChild('Modules'),
+            game:GetService('Lighting'),
+            Library.ScreenGui,
+        }
+        for _, root in ipairs(places) do
+            if root then
+                local f = root:FindFirstChild(name, true)
+                if f and (f:IsA('Model') or f:IsA('BasePart') or f:IsA('MeshPart')) then
+                    return f
+                end
+            end
+        end
+        return nil
+    end
+
+    local function setBackgroundItem(nameOrInstance)
+        clearBackgroundItem()
+        if typeof(nameOrInstance) == 'Instance' then
+            local clone = nameOrInstance:Clone()
+            clone.Parent = MenuWorld
+            if clone:IsA('Model') then
+                if not clone.PrimaryPart then
+                    local pp = clone:FindFirstChildWhichIsA('BasePart', true)
+                    if pp then clone.PrimaryPart = pp end
+                end
+                if clone.PrimaryPart then
+                    clone:PivotTo(CFrame.new(0, 0, 0))
+                end
+            elseif clone:IsA('BasePart') then
+                clone.CFrame = CFrame.new(0, 0, 0)
+            end
+            styleBackgroundItem(clone)
+            MenuBgState.Item = clone
+            MenuBgState.ItemName = clone.Name
+            return true
+        end
+        local name = tostring(nameOrInstance or 'None')
+        MenuBgState.ItemName = name
+        Library.ItemType = name
+        if name == 'None' or name == '' then
+            return false
+        end
+        local src = findSourceItem(name)
+        if not src then
+            return false
+        end
+        return setBackgroundItem(src)
+    end
+    Library.SetMenuBackgroundItem = function(_, nameOrInstance)
+        return setBackgroundItem(nameOrInstance)
+    end
+    function Library:SetMenuBackgroundSource(folder)
+        MenuBgState.Source = folder
+        if MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
+            setBackgroundItem(MenuBgState.ItemName)
+        end
+    end
+    function Library:SetMenuBackgroundEnabled(on)
+        MenuBgState.Enabled = on and true or false
+        MenuBgHolder.Visible = MenuBgState.Enabled
+        if not MenuBgState.Enabled then
+            clearBackgroundItem()
+        elseif MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
+            setBackgroundItem(MenuBgState.ItemName)
+        end
+    end
+    function Library:SetSwordSpeed(speed)
+        Library.SwordSpeed = tonumber(speed) or 0.15
+    end
+    function Library:SetBackTransparency(v)
+        v = math.clamp(tonumber(v) or 0.7, 0, 1)
+        Library.BackTransparency = v
+        MenuViewport.BackgroundTransparency = v
+    end
+    function Library:RefreshMenuBackgroundStyle()
+        styleBackgroundItem(MenuBgState.Item)
+        MenuViewport.BackgroundColor3 = Library.BackColor or Color3.new(0,0,0)
+        MenuViewport.BackgroundTransparency = Library.BackTransparency or 0.7
+    end
+
+    -- rotation loop (UE: CFrame.Angles(0, SwordSpeed/10 * dt * 60, 0))
+    if MenuBgState.Conn then pcall(function() MenuBgState.Conn:Disconnect() end) end
+    MenuBgState.Conn = game:GetService('RunService').RenderStepped:Connect(function(dt)
+        if not MenuBgState.Enabled then return end
+        local item = MenuBgState.Item
+        if not item then return end
+        local speed = (Library.SwordSpeed or 0.15) / 10 * dt * 60
+        local step = CFrame.Angles(0, speed, 0)
+        if item:IsA('Model') then
+            pcall(function() item:PivotTo(item:GetPivot() * step) end)
+        elseif item:IsA('BasePart') then
+            item.CFrame = item.CFrame * step
+        end
+    end)
+
+    -- try initial item if configured
+    if MenuBgState.Enabled and MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
+        task.defer(function() setBackgroundItem(MenuBgState.ItemName) end)
+    end
+
     local CornerCircle = Library:Create('Frame', {
         AnchorPoint      = Vector2.new(0.5, 0.5);
         BackgroundColor3 = Library.AccentColor;
@@ -3988,37 +4312,70 @@ function Library:CreateWindow(...)
         Library.Toggled = not Library.Toggled;
         ModalElement.Modal = Library.Toggled;
         Outer.Visible = Library.Toggled;
+        -- UE-style custom cursor (ImageLabel + shadow, asset 4292970642)
         if Library.Toggled and not Library.CursorLoopRunning then
             Library.CursorLoopRunning = true
             task.spawn(function()
-                local State = InputService.MouseIconEnabled;
-                local Cursor = Drawing.new('Triangle');
-                Cursor.Thickness = 1;
-                Cursor.Filled = true;
-                Cursor.Visible = true;
-                local CursorOutline = Drawing.new('Triangle');
-                CursorOutline.Thickness = 1;
-                CursorOutline.Filled = false;
-                CursorOutline.Color = Color3.new(0, 0, 0);
-                CursorOutline.Visible = true;
-                while Library.Toggled and ScreenGui.Parent do
-                    InputService.MouseIconEnabled = false;
-                    local mPos = InputService:GetMouseLocation();
-                    Cursor.Color = Library.AccentColor;
-                    Cursor.PointA = Vector2.new(mPos.X, mPos.Y);
-                    Cursor.PointB = Vector2.new(mPos.X + 16, mPos.Y + 6);
-                    Cursor.PointC = Vector2.new(mPos.X + 6, mPos.Y + 16);
-                    CursorOutline.PointA = Cursor.PointA;
-                    CursorOutline.PointB = Cursor.PointB;
-                    CursorOutline.PointC = Cursor.PointC;
-                    RenderStepped:Wait();
-                end;
-                InputService.MouseIconEnabled = State;
-                Cursor:Remove();
-                CursorOutline:Remove();
+                if Library.ShowCustomCursor == false then
+                    Library.CursorLoopRunning = false
+                    return
+                end
+                local previousMouseIconEnabled = InputService.MouseIconEnabled
+                local guiService = game:GetService('GuiService')
+                local cursorLayer = Instance.new('ScreenGui')
+                cursorLayer.Name = 'cursorLayer'
+                cursorLayer.DisplayOrder = 10000
+                cursorLayer.ResetOnSpawn = false
+                cursorLayer.IgnoreGuiInset = true
+                pcall(function() cursorLayer.Parent = ScreenGui.Parent end)
+                if not cursorLayer.Parent then
+                    cursorLayer.Parent = ScreenGui
+                end
+
+                local cursorImage = Instance.new('ImageLabel')
+                cursorImage.Name = 'Cursor'
+                cursorImage.Image = 'http://www.roblox.com/asset/?id=4292970642'
+                cursorImage.BackgroundTransparency = 1
+                cursorImage.ZIndex = 125
+                cursorImage.Size = UDim2.fromOffset(17, 17)
+                cursorImage.Rotation = -45
+                cursorImage.Parent = cursorLayer
+
+                local cursorShadow = Instance.new('ImageLabel')
+                cursorShadow.Name = 'CursorShadow'
+                cursorShadow.Image = 'http://www.roblox.com/asset/?id=4292970642'
+                cursorShadow.ImageColor3 = Color3.new(0, 0, 0)
+                cursorShadow.BackgroundTransparency = 1
+                cursorShadow.ZIndex = 124
+                cursorShadow.Size = UDim2.fromOffset(19, 19)
+                cursorShadow.Rotation = -45
+                cursorShadow.Parent = cursorLayer
+
+                while Library.Toggled and ScreenGui.Parent and cursorLayer.Parent do
+                    if Library.ShowCustomCursor == false then
+                        break
+                    end
+                    InputService.MouseIconEnabled = false
+                    local mouseLocation = InputService:GetMouseLocation()
+                    local insetY = 0
+                    pcall(function()
+                        insetY = guiService:GetGuiInset().Y
+                    end)
+                    -- UE: Position = mouse - GuiInset.Y - 1
+                    local cursorPosition = UDim2.fromOffset(mouseLocation.X, mouseLocation.Y - insetY - 1)
+                    cursorImage.ImageColor3 = Library.AccentColor
+                    cursorImage.Position = cursorPosition
+                    cursorShadow.Position = cursorPosition - UDim2.fromOffset(1, 1)
+                    RenderStepped:Wait()
+                end
+
+                InputService.MouseIconEnabled = previousMouseIconEnabled
+                pcall(function() cursorImage:Destroy() end)
+                pcall(function() cursorShadow:Destroy() end)
+                pcall(function() cursorLayer:Destroy() end)
                 Library.CursorLoopRunning = false
-            end);
-        end;
+            end)
+        end
         if Library.UseBlur then
             if Library.Toggled then
                 Library.BlurEffect.Enabled = true
