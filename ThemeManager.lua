@@ -79,7 +79,7 @@ local ThemeManager = {} do
 
 	function ThemeManager:ThemeUpdate()
 		-- This allows us to force apply themes without loading the themes tab :)
-		local options = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "SwordColor", "BackColor" }
+		local options = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "RiskColor", "SwordColor", "BackColor" }
 		for i, field in next, options do
 			if Options and Options[field] then
 				self.Library[field] = Options[field].Value
@@ -118,23 +118,45 @@ local ThemeManager = {} do
 	end
 
 	function ThemeManager:CreateThemeManager(groupbox)
-		groupbox:AddLabel('Background color'):AddColorPicker('BackgroundColor', { Default = self.Library.BackgroundColor });
-		groupbox:AddLabel('Main color')	:AddColorPicker('MainColor', { Default = self.Library.MainColor });
-		groupbox:AddLabel('Accent color'):AddColorPicker('AccentColor', { Default = self.Library.AccentColor });
-		groupbox:AddLabel('Outline color'):AddColorPicker('OutlineColor', { Default = self.Library.OutlineColor });
-		groupbox:AddLabel('Font color')	:AddColorPicker('FontColor', { Default = self.Library.FontColor });
+		-- UE Themes tab controls
+		if not self.Library.RiskColor then
+			self.Library.RiskColor = Color3.fromRGB(255, 50, 50)
+		end
+
+		groupbox:AddLabel('Main Color'):AddColorPicker('MainColor', {
+			Default = self.Library.MainColor,
+		})
+		groupbox:AddLabel('Accent Color'):AddColorPicker('AccentColor', {
+			Default = self.Library.AccentColor,
+		})
+		groupbox:AddLabel('Background Color'):AddColorPicker('BackgroundColor', {
+			Default = self.Library.BackgroundColor,
+		})
+		groupbox:AddLabel('Outline Color'):AddColorPicker('OutlineColor', {
+			Default = self.Library.OutlineColor,
+		})
+		groupbox:AddLabel('Text Color'):AddColorPicker('FontColor', {
+			Default = self.Library.FontColor,
+		})
+		groupbox:AddLabel('Risk Text Color'):AddColorPicker('RiskColor', {
+			Default = self.Library.RiskColor,
+		})
 
 		local ThemesArray = {}
 		for Name, Theme in next, self.BuiltInThemes do
 			table.insert(ThemesArray, Name)
 		end
+		table.sort(ThemesArray, function(a, b)
+			return self.BuiltInThemes[a][1] < self.BuiltInThemes[b][1]
+		end)
 
-		table.sort(ThemesArray, function(a, b) return self.BuiltInThemes[a][1] < self.BuiltInThemes[b][1] end)
+		groupbox:AddDropdown('ThemeManager_ThemeList', {
+			Text = 'Theme list',
+			Values = ThemesArray,
+			Default = 1,
+		})
 
-		groupbox:AddDivider()
-		groupbox:AddDropdown('ThemeManager_ThemeList', { Text = 'Theme list', Values = ThemesArray, Default = 1 })
-
-		groupbox:AddButton('Set as default', function()
+		groupbox:AddButton('Set Default', function()
 			self:SaveDefault(Options.ThemeManager_ThemeList.Value)
 			self.Library:Notify(string.format('Set default theme to %q', Options.ThemeManager_ThemeList.Value))
 		end)
@@ -143,18 +165,55 @@ local ThemeManager = {} do
 			self:ApplyTheme(Options.ThemeManager_ThemeList.Value)
 		end)
 
-		groupbox:AddDivider()
-		groupbox:AddInput('ThemeManager_CustomThemeName', { Text = 'Custom theme name' })
-		groupbox:AddDropdown('ThemeManager_CustomThemeList', { Text = 'Custom themes', Values = self:ReloadCustomThemes(), AllowNull = true, Default = 1 })
-		groupbox:AddDivider()
-		
-		groupbox:AddButton('Save theme', function() 
-			self:SaveCustomTheme(Options.ThemeManager_CustomThemeName.Value)
+		groupbox:AddInput('ThemeManager_CustomThemeName', {
+			Text = 'Custom theme name',
+		})
 
+		groupbox:AddButton('Create theme', function()
+			local themeName = Options.ThemeManager_CustomThemeName.Value
+			if not themeName or themeName == '' then
+				self.Library:Notify('Failed to create theme: invalid name')
+				return
+			end
+			self:SaveCustomTheme(themeName .. '.json')
 			Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
 			Options.ThemeManager_CustomThemeList:SetValue(nil)
-		end):AddButton('Load theme', function() 
-			self:ApplyTheme(Options.ThemeManager_CustomThemeList.Value) 
+			self.Library:Notify(string.format('Created theme %q', themeName))
+		end)
+
+		groupbox:AddDropdown('ThemeManager_CustomThemeList', {
+			Text = 'Custom themes',
+			Values = self:ReloadCustomThemes(),
+			AllowNull = true,
+			Default = 1,
+		})
+
+		groupbox:AddButton('Load theme', function()
+			self:ApplyTheme(Options.ThemeManager_CustomThemeList.Value)
+		end)
+
+		groupbox:AddButton('Overwrite Theme', function()
+			local name = Options.ThemeManager_CustomThemeList.Value
+			if not name or name == '' then
+				self.Library:Notify('No custom theme selected')
+				return
+			end
+			self:SaveCustomTheme(name)
+			self.Library:Notify(string.format('Overwrote theme %q', name))
+		end):AddButton('Delete Theme', function()
+			local themeName = Options.ThemeManager_CustomThemeList.Value
+			if not themeName or themeName == '' then
+				self.Library:Notify('No custom theme selected')
+				return
+			end
+			local ok, err = self:Delete(themeName)
+			if not ok then
+				self.Library:Notify('Failed to delete theme: ' .. tostring(err))
+				return
+			end
+			Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
+			Options.ThemeManager_CustomThemeList:SetValue(nil)
+			self.Library:Notify(string.format('Deleted theme %q', themeName))
 		end)
 
 		groupbox:AddButton('Refresh list', function()
@@ -180,9 +239,33 @@ local ThemeManager = {} do
 		Options.AccentColor:OnChanged(UpdateTheme)
 		Options.OutlineColor:OnChanged(UpdateTheme)
 		Options.FontColor:OnChanged(UpdateTheme)
+		if Options.RiskColor then
+			Options.RiskColor:OnChanged(UpdateTheme)
+		end
 	end
 
-	function ThemeManager:GetCustomTheme(file)
+	function ThemeManager:Delete(themeName)
+		if not themeName or themeName == '' then
+			return false, 'invalid name'
+		end
+		local path = self.Folder .. '/themes/' .. themeName
+		if not path:find('%.json$') then
+			path = path .. '.json'
+		end
+		local ok = false
+		pcall(function()
+			if isfile and isfile(path) then
+				if delfile then delfile(path); ok = true
+				elseif type(removefile) == 'function' then removefile(path); ok = true end
+			end
+		end)
+		if not ok then
+			return false, 'file not found or cannot delete'
+		end
+		return true
+	end
+
+function ThemeManager:GetCustomTheme(file)
 		local path = self.Folder .. '/themes/' .. file
 		if not isfile(path) then
 			return nil
