@@ -67,15 +67,21 @@ local ThemeManager = {} do
 			end
 		end
 
-		-- Safe background refresh (never throws)
+		-- Apply all background settings (ported from working UE file)
 		pcall(function()
-			if self.Library and type(self.Library.RefreshMenuBackgroundStyle) == "function" then
-				self.Library:RefreshMenuBackgroundStyle()
+			local L = self.Library
+			if not L then return end
+			if type(L.RefreshMenuBackgroundStyle) == "function" then
+				L:RefreshMenuBackgroundStyle()
 			end
-		end)
-		pcall(function()
-			if self.Library and type(self.Library.SetMenuBackgroundItem) == "function" and self.Library.ItemType then
-				self.Library:SetMenuBackgroundItem(self.Library.ItemType)
+			if type(L.SetMenuBackgroundItem) == "function" and L.ItemType then
+				L:SetMenuBackgroundItem(L.ItemType)
+			end
+			if type(L.SetSwordSpeed) == "function" and L.SwordSpeed then
+				L:SetSwordSpeed(L.SwordSpeed)
+			end
+			if type(L.SetBackTransparency) == "function" and L.BackTransparency then
+				L:SetBackTransparency(L.BackTransparency)
 			end
 		end)
 
@@ -357,7 +363,7 @@ local ThemeManager = {} do
 			if Options.SwordReflectance then L.SwordReflectance = Options.SwordReflectance.Value end
 			if Options.SwordSpeed then
 				L.SwordSpeed = Options.SwordSpeed.Value
-				if type(L.SetSwordSpeed) == 'function' then pcall(function() L:SetSwordSpeed(Options.SwordSpeed.Value) end) end
+				if L.SetSwordSpeed then L:SetSwordSpeed(Options.SwordSpeed.Value) end
 			end
 			if Options.SwordMaterial then
 				local matName = Options.SwordMaterial.Value
