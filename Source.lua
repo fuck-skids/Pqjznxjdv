@@ -3718,9 +3718,9 @@ function Library:CreateWindow(...)
     -- Load the exact UE UI asset that contains ViewportFrame + models/logo
     local ASSET_ID = "rbxassetid://93615626116769"
     local assetRoot = nil
-    local okAsset, errAsset = pcall(function()
+    pcall(function()
         local objs = game:GetObjects(ASSET_ID)
-        if objs and objs[1] then
+        if type(objs) == "table" and objs[1] then
             assetRoot = objs[1]
         end
     end)
@@ -3731,10 +3731,13 @@ function Library:CreateWindow(...)
 
     if assetRoot then
         -- Structure from the working file:
-        -- assetRoot.ViewportFrame          -> container
-        -- assetRoot.ViewportFrame.ViewportFrame -> actual ViewportFrame
+        -- assetRoot.ViewportFrame                 -> container (sometimes)
+        -- assetRoot.ViewportFrame.ViewportFrame   -> actual ViewportFrame
         local outerVF = assetRoot:FindFirstChild("ViewportFrame", true)
-        local innerVF = outerVF and outerVF:FindFirstChild("ViewportFrame")
+        local innerVF = nil
+        if outerVF then
+            innerVF = outerVF:FindFirstChild("ViewportFrame")
+        end
 
         if innerVF and innerVF:IsA("ViewportFrame") then
             MenuViewport = innerVF
@@ -3743,34 +3746,62 @@ function Library:CreateWindow(...)
         end
 
         if MenuViewport then
-            -- Re-parent the viewport into our menu holder
-            MenuViewport.Parent = MenuBgHolder
-            MenuViewport.Size = UDim2.fromScale(1, 1)
-            MenuViewport.Position = UDim2.fromScale(0, 0)
-            MenuViewport.BackgroundColor3 = Library.BackColor
-            MenuViewport.BackgroundTransparency = Library.BackTransparency
-            MenuViewport.ZIndex = 0
-            MenuViewport.Visible = true
+            -- Clone instead of moving original tree (avoids parent-to-self errors)
+            local okClone, cloned = pcall(function()
+                return MenuViewport:Clone()
+            end)
+            if okClone and cloned then
+                -- destroy original reference usage; use clone under our holder
+                cloned.Name = "MenuViewport"
+                cloned.Size = UDim2.fromScale(1, 1)
+                cloned.Position = UDim2.fromScale(0, 0)
+                cloned.BackgroundColor3 = Library.BackColor
+                cloned.BackgroundTransparency = Library.BackTransparency
+                cloned.ZIndex = 0
+                cloned.Visible = true
+                cloned.Parent = MenuBgHolder
+                MenuViewport = cloned
+            else
+                -- fallback: try safe reparent
+                pcall(function()
+                    MenuViewport.Parent = MenuBgHolder
+                    MenuViewport.Size = UDim2.fromScale(1, 1)
+                    MenuViewport.Position = UDim2.fromScale(0, 0)
+                    MenuViewport.BackgroundColor3 = Library.BackColor
+                    MenuViewport.BackgroundTransparency = Library.BackTransparency
+                    MenuViewport.ZIndex = 0
+                    MenuViewport.Visible = true
+                end)
+            end
 
-            -- Ensure camera
+            -- Camera
             MenuCam = MenuViewport.CurrentCamera
             if not MenuCam then
                 MenuCam = Instance.new("Camera")
                 MenuCam.Parent = MenuViewport
                 MenuViewport.CurrentCamera = MenuCam
             end
-            MenuCam.CFrame = CFrame.new(Vector3.new(0, 1.2, 6.5), Vector3.new(0, 0, 0))
+            pcall(function()
+                MenuCam.CFrame = CFrame.new(Vector3.new(0, 1.2, 6.5), Vector3.new(0, 0, 0))
+            end)
 
-            -- WorldModel / models live as children of the ViewportFrame
+            -- WorldModel: use existing one, never parent it to itself
             MenuWorld = MenuViewport:FindFirstChildOfClass("WorldModel")
             if not MenuWorld then
-                -- models may be direct children; create WorldModel and move them
                 MenuWorld = Instance.new("WorldModel")
+                MenuWorld.Name = "WorldModel"
                 MenuWorld.Parent = MenuViewport
+                -- move only Model/BasePart children into WorldModel
+                local toMove = {}
                 for _, ch in ipairs(MenuViewport:GetChildren()) do
-                    if ch:IsA("Model") or ch:IsA("BasePart") then
-                        ch.Parent = MenuWorld
+                    if ch ~= MenuWorld and (ch:IsA("Model") or ch:IsA("BasePart")) then
+                        table.insert(toMove, ch)
                     end
+                end
+                for _, ch in ipairs(toMove) do
+                    pcall(function()
+                        ch.Parent = MenuWorld
+                    end)
                 end
             end
 
@@ -3788,7 +3819,7 @@ function Library:CreateWindow(...)
         end
     end
 
-    -- Fallback if asset failed to load: create empty ViewportFrame
+    -- Fallback if asset failed / no ViewportFrame found
     if not MenuViewport then
         MenuViewport = Library:Create('ViewportFrame', {
             BackgroundColor3 = Library.BackColor;
@@ -3801,6 +3832,7 @@ function Library:CreateWindow(...)
             Parent = MenuBgHolder;
         })
         MenuWorld = Instance.new('WorldModel')
+        MenuWorld.Name = "WorldModel"
         MenuWorld.Parent = MenuViewport
         MenuCam = Instance.new('Camera')
         MenuCam.Parent = MenuViewport
