@@ -387,39 +387,44 @@ end
 	-- Full UE-style Settings tab (Menu / Notifications / Background)
 	-- Call: SaveManager:BuildUESettings(Tabs.Settings)
 	-- ============================================================
+
+	-- ============================================================
+	-- UE Settings UI (exact controls from Unnamed)
+	-- Menu: bind, keybind menu, transparency, mode
+	-- Notifications: clips, colors, position, transparency, style
+	-- Call: SaveManager:BuildUESettings(Tabs.Settings)
+	-- ============================================================
 	function SaveManager:BuildUESettings(tab)
 		assert(self.Library, 'Must set SaveManager.Library')
 		local Library = self.Library
 
-		-- ---------- Menu ----------
-		local MenuGroup = tab:AddLeftGroupbox('Menu')
+		-- ========== MENU ==========
+		local Menu = tab:AddLeftGroupbox('Menu')
 
-		MenuGroup:AddLabel('Menu keybind'):AddKeyPicker('MenuKeybind', {
+		Menu:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', {
 			Default = 'RightShift',
 			NoUI = true,
 			Text = 'Menu keybind',
 			Modes = { 'Toggle' },
 		})
 
-		MenuGroup:AddToggle('KeybindMenu', {
+		Menu:AddToggle('KeybindMenu', {
 			Text = 'Keybind Menu',
 			Default = true,
 			Tooltip = 'Shows Keybinds',
 			Callback = function(v)
 				Library.KeypickerListVisible = v and true or false
 				if Library.KeybindFrame then
-					-- visibility also driven by RefreshKeybinds content
-					if Library.RefreshKeybinds then
-						pcall(function() Library:RefreshKeybinds() end)
-					end
 					if not v then
 						Library.KeybindFrame.Visible = false
+					elseif Library.RefreshKeybinds then
+						pcall(function() Library:RefreshKeybinds() end)
 					end
 				end
 			end,
 		})
 
-		MenuGroup:AddSlider('KeybindMenuTransparency', {
+		Menu:AddSlider('KeybindMenuTransparency', {
 			Text = 'Menu Transparency',
 			Default = 100,
 			Min = 0,
@@ -428,10 +433,11 @@ end
 			Rounding = 0,
 			Compact = true,
 			Callback = function(v)
+				-- UE: Transparency = 1 - (value/100) on KeybindFrame + inner Frame
+				local t = 1 - ((tonumber(v) or 100) / 100)
 				if Library.SetKeybindMenuTransparency then
 					Library:SetKeybindMenuTransparency(v)
 				else
-					local t = 1 - ((tonumber(v) or 100) / 100)
 					if Library.KeybindFrame then
 						pcall(function() Library.KeybindFrame.BackgroundTransparency = t end)
 					end
@@ -442,12 +448,13 @@ end
 			end,
 		})
 
-		MenuGroup:AddDropdown('KeybindMenuValue', {
+		Menu:AddDropdown('KeybindMenuValue', {
 			Text = 'Keybind Menu Mode',
-			Values = { 'All', 'Active', 'Toggled' },
-			Default = 1,
+			Values = { 'Active', 'Toggled', 'All' },
+			Default = 2, -- Toggled (UE default)
 			Multi = false,
 			Callback = function(v)
+				Library.KeypickerListMode = v
 				if Library.SetKeybindMode then
 					pcall(function() Library:SetKeybindMode(v) end)
 				else
@@ -459,33 +466,28 @@ end
 			end,
 		})
 
-		MenuGroup:AddButton('Unload', function()
-			if Library.Unload then
-				pcall(function() Library:Unload() end)
-			elseif getgenv().Library and getgenv().Library.Unload then
-				pcall(function() getgenv().Library:Unload() end)
-			end
-		end)
+		-- ========== NOTIFICATIONS ==========
+		local Notif = tab:AddLeftGroupbox('Notifications')
 
-		-- ---------- Notifications ----------
-		local NotifGroup = tab:AddLeftGroupbox('Notifications')
-
-		NotifGroup:AddToggle('NotificationClips', {
+		Notif:AddToggle('NotificationClips', {
 			Text = 'Clip Descendants',
 			Default = true,
 			Tooltip = 'if enabled, will hide notifications past a certain point',
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
 				Library.NotifyConfig.ClipDescendants = v and true or false
+				if Library.NotificationArea then
+					Library.NotificationArea.ClipsDescendants = v and true or false
+				end
 				if Library.UpdateNotifAlignment then
 					Library.UpdateNotifAlignment()
 				end
 			end,
 		})
 
-		local clipDep = NotifGroup:AddDependencyBox()
-		clipDep:SetupDependencies({ { Toggles.NotificationClips, true } })
-		clipDep:AddSlider('NotificationClipsDistance', {
+		local clipBox = Notif:AddDependencyBox()
+		clipBox:SetupDependencies({ { Toggles.NotificationClips, true } })
+		clipBox:AddSlider('NotificationClipsDistance', {
 			Text = 'Clip Past Distance',
 			Default = 200,
 			Min = 100,
@@ -496,10 +498,8 @@ end
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
 				Library.NotifyConfig.ClipDistance = v
-				if Library.NotificationArea then
-					if Library.NotifyConfig.ClipDescendants then
-						Library.NotificationArea.Size = UDim2.fromOffset(300, v)
-					end
+				if Library.NotificationArea and Library.NotifyConfig.ClipDescendants then
+					Library.NotificationArea.Size = UDim2.new(0, 2560, 0, v) -- UE uses width 2560
 				end
 				if Library.UpdateNotifAlignment then
 					Library.UpdateNotifAlignment()
@@ -507,7 +507,7 @@ end
 			end,
 		})
 
-		NotifGroup:AddToggle('NotificationColors', {
+		Notif:AddToggle('NotificationColors', {
 			Text = 'Force Color',
 			Default = false,
 			Callback = function(v)
@@ -516,21 +516,20 @@ end
 			end,
 		})
 
-		-- color pickers (optional force palette)
-		NotifGroup:AddLabel('Main Color'):AddColorPicker('NotificationColorsMain', {
+		Notif:AddLabel('Main Color'):AddColorPicker('NotificationColorsMain', {
 			Default = Library.MainColor or Color3.fromRGB(30, 30, 30),
 		})
-		NotifGroup:AddLabel('Accent Color'):AddColorPicker('NotificationColorsAccent', {
+		Notif:AddLabel('Accent Color'):AddColorPicker('NotificationColorsAccent', {
 			Default = Library.AccentColor or Color3.fromRGB(0, 150, 255),
 		})
-		NotifGroup:AddLabel('Outline Color'):AddColorPicker('NotificationColorsOutline', {
+		Notif:AddLabel('Outline Color'):AddColorPicker('NotificationColorsOutline', {
 			Default = Library.OutlineColor or Color3.fromRGB(60, 60, 60),
 		})
-		NotifGroup:AddLabel('Font Color'):AddColorPicker('NotificationColorsFont', {
+		Notif:AddLabel('Font Color'):AddColorPicker('NotificationColorsFont', {
 			Default = Library.FontColor or Color3.fromRGB(255, 255, 255),
 		})
 
-		NotifGroup:AddButton('copy colors', function()
+		Notif:AddButton('copy colors', function()
 			if Options.NotificationColorsMain and Library.MainColor then
 				Options.NotificationColorsMain:SetValueRGB(Library.MainColor)
 			end
@@ -543,10 +542,10 @@ end
 			if Options.NotificationColorsFont and Library.FontColor then
 				Options.NotificationColorsFont:SetValueRGB(Library.FontColor)
 			end
-			Library:Notify('Copied theme colors to notification colors', 2)
+			Library:Notify('copied notification colors', 2)
 		end)
 
-		NotifGroup:AddSlider('NotificationPositionX', {
+		Notif:AddSlider('NotificationPositionX', {
 			Text = 'Position X',
 			Default = 0,
 			Min = 0,
@@ -561,7 +560,7 @@ end
 			end,
 		})
 
-		NotifGroup:AddSlider('NotificationPositionY', {
+		Notif:AddSlider('NotificationPositionY', {
 			Text = 'Position Y',
 			Default = 60,
 			Min = 0,
@@ -576,7 +575,7 @@ end
 			end,
 		})
 
-		NotifGroup:AddSlider('NotificationTransparency', {
+		Notif:AddSlider('NotificationTransparency', {
 			Text = 'Transparency',
 			Default = 25,
 			Min = 0,
@@ -593,10 +592,10 @@ end
 			end,
 		})
 
-		NotifGroup:AddDropdown('NotificationAnchorStyle', {
+		Notif:AddDropdown('NotificationAnchorStyle', {
 			Text = 'Alignment',
 			Values = { 'Left', 'Right', 'Center' },
-			Default = 3,
+			Default = 3, -- Center (UE default)
 			Multi = false,
 			Tooltip = 'how the text is positioned',
 			Callback = function(v)
@@ -606,10 +605,10 @@ end
 			end,
 		})
 
-		NotifGroup:AddDropdown('NotificationBarStyle', {
+		Notif:AddDropdown('NotificationBarStyle', {
 			Text = 'Bar Side',
 			Values = { 'Left', 'Right', 'Top', 'Bottom' },
-			Default = 4,
+			Default = 4, -- Bottom (UE default)
 			Multi = false,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
@@ -617,218 +616,30 @@ end
 			end,
 		})
 
-		NotifGroup:AddDropdown('NotificationStyleSortOrder', {
+		Notif:AddDropdown('NotificationStyleSortOrder', {
 			Text = 'Sort Order',
 			Values = { 'Text Length', 'Default' },
-			Default = 2,
+			Default = 2, -- Default
 			Multi = false,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
 				Library.NotifyConfig.SortOrder = v
+				-- UE: UIListLayout.SortOrder = Name if Text Length else LayoutOrder
+				if Library.NotifLayout then
+					if v == 'Text Length' then
+						Library.NotifLayout.SortOrder = Enum.SortOrder.Name
+					else
+						Library.NotifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+					end
+				end
 			end,
 		})
 
-		NotifGroup:AddSlider('NotifyDuration', {
-			Text = 'Duration',
-			Default = 5,
-			Min = 1,
-			Max = 15,
-			Suffix = 's',
-			Rounding = 0,
-			Compact = true,
-			Callback = function(v)
-				Library.NotifyConfig = Library.NotifyConfig or {}
-				Library.NotifyConfig.Duration = v
-				if Library.SetNotifyDuration then Library:SetNotifyDuration(v) end
-			end,
-		})
-
-		NotifGroup:AddButton('Send Notification', function()
-			Library:Notify('Test notification', Library.NotifyConfig and Library.NotifyConfig.Duration or 5)
+		Notif:AddButton('Send Notification', function()
+			Library:Notify('test notification (' .. tostring(math.random(1000, 9999)) .. ')', 3)
 		end)
 
-		NotifGroup:AddButton('Send Center Notification', function()
-			if Library.NotifyBottomCenter then
-				Library:NotifyBottomCenter('Test center notification', Library.NotifyCenterConfig and Library.NotifyCenterConfig.Duration or 5)
-			else
-				Library:Notify('Center notify not available', 3)
-			end
-		end)
-
-		-- Center-specific transparency / duration
-		NotifGroup:AddSlider('NotificationCenterTransparency', {
-			Text = 'Center Transparency',
-			Default = 25,
-			Min = 0,
-			Max = 100,
-			Suffix = '%',
-			Rounding = 0,
-			Compact = true,
-			Callback = function(v)
-				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
-				Library.NotifyCenterConfig.Transparency = v
-				if Library.SetNotifyCenterTransparency then
-					Library:SetNotifyCenterTransparency(v)
-				end
-			end,
-		})
-
-		NotifGroup:AddSlider('NotificationCenterPositionY', {
-			Text = 'Center Position Y',
-			Default = 85,
-			Min = 0,
-			Max = 100,
-			Suffix = '%',
-			Rounding = 0,
-			Compact = true,
-			Callback = function(v)
-				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
-				Library.NotifyCenterConfig.PositionYPct = v
-				if Library.SetNotifyCenterPositionPct then
-					Library:SetNotifyCenterPositionPct(v)
-				elseif Library.UpdateNotifCenterArea then
-					Library:UpdateNotifCenterArea()
-				end
-			end,
-		})
-
-		-- ---------- Background (3D rotating item) ----------
-		local BgGroup = tab:AddRightGroupbox('Background')
-
-		BgGroup:AddToggle('MenuBackgroundEnabled', {
-			Text = 'Enable Background',
-			Default = true,
-			Callback = function(v)
-				if Library.SetMenuBackgroundEnabled then
-					Library:SetMenuBackgroundEnabled(v)
-				end
-			end,
-		})
-
-		BgGroup:AddDropdown('ItemType', {
-			Text = 'Background Item',
-			Values = { 'None', 'Unnamed Enhancements' },
-			Default = 1,
-			Multi = false,
-			Callback = function(v)
-				Library.ItemType = v
-				if Library.SetMenuBackgroundItem then
-					Library:SetMenuBackgroundItem(v)
-				end
-			end,
-		})
-
-		BgGroup:AddInput('ItemTypeCustom', {
-			Text = 'Custom item name',
-			Default = '',
-			Placeholder = 'Model name in ReplicatedStorage...',
-			Callback = function(v)
-				if v and v ~= '' then
-					Library.ItemType = v
-					if Library.SetMenuBackgroundItem then
-						Library:SetMenuBackgroundItem(v)
-					end
-				end
-			end,
-		})
-
-		BgGroup:AddSlider('SwordSpeed', {
-			Text = 'Rotate Speed',
-			Default = 0.15,
-			Min = 0,
-			Max = 2,
-			Rounding = 2,
-			Compact = true,
-			Callback = function(v)
-				if Library.SetSwordSpeed then
-					Library:SetSwordSpeed(v)
-				else
-					Library.SwordSpeed = v
-				end
-			end,
-		})
-
-		BgGroup:AddSlider('BackTransparency', {
-			Text = 'Back Transparency',
-			Default = 70,
-			Min = 0,
-			Max = 100,
-			Suffix = '%',
-			Rounding = 0,
-			Compact = true,
-			Callback = function(v)
-				local t = (tonumber(v) or 70) / 100
-				if Library.SetBackTransparency then
-					Library:SetBackTransparency(t)
-				else
-					Library.BackTransparency = t
-					if Library.MenuViewport then
-						Library.MenuViewport.BackgroundTransparency = t
-					end
-				end
-			end,
-		})
-
-		BgGroup:AddLabel('Sword Color'):AddColorPicker('SwordColor', {
-			Default = Library.SwordColor or Color3.fromRGB(255, 255, 255),
-			Callback = function(val)
-				Library.SwordColor = val
-				if Library.RefreshMenuBackgroundStyle then
-					Library:RefreshMenuBackgroundStyle()
-				end
-			end,
-		})
-
-		BgGroup:AddLabel('Back Color'):AddColorPicker('BackColor', {
-			Default = Library.BackColor or Color3.fromRGB(0, 0, 0),
-			Callback = function(val)
-				Library.BackColor = val
-				if Library.MenuViewport then
-					Library.MenuViewport.BackgroundColor3 = val
-				end
-				if Library.RefreshMenuBackgroundStyle then
-					Library:RefreshMenuBackgroundStyle()
-				end
-			end,
-		})
-
-		BgGroup:AddDropdown('SwordMaterial', {
-			Text = 'Sword Material',
-			Values = { 'Neon', 'ForceField', 'Glass', 'SmoothPlastic', 'Metal' },
-			Default = 1,
-			Multi = false,
-			Callback = function(v)
-				local ok, mat = pcall(function() return Enum.Material[v] end)
-				if ok and mat then
-					Library.SwordMaterial = mat
-					if Library.RefreshMenuBackgroundStyle then
-						Library:RefreshMenuBackgroundStyle()
-					end
-				end
-			end,
-		})
-
-		BgGroup:AddSlider('SwordTransparency', {
-			Text = 'Sword Transparency',
-			Default = 0,
-			Min = 0,
-			Max = 100,
-			Suffix = '%',
-			Rounding = 0,
-			Compact = true,
-			Callback = function(v)
-				Library.SwordTransparency = (tonumber(v) or 0) / 100
-				if Library.RefreshMenuBackgroundStyle then
-					Library:RefreshMenuBackgroundStyle()
-				end
-			end,
-		})
-
-		-- ignore transient UI indexes from save
-		self:SetIgnoreIndexes({
-			'MenuKeybind', -- usually handled by Library toggle bind
-			'Send Notification',
-		})
+		self:SetIgnoreIndexes({ 'MenuKeybind' })
 	end
 
 
