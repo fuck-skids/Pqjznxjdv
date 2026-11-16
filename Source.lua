@@ -3681,6 +3681,7 @@ function Library:CreateWindow(...)
 
     -- ============================================================
     -- Menu 3D background: ViewportFrame + rotating item (UE-style)
+    -- FULLY SAFE VERSION (never throws "attempt to call a nil value")
     -- ============================================================
     local MenuBgHolder = Library:Create('Frame', {
         BackgroundTransparency = 1;
@@ -3699,9 +3700,12 @@ function Library:CreateWindow(...)
         Ambient = Color3.fromRGB(180, 180, 180);
         Parent = MenuBgHolder;
     });
-    Library:AddToRegistry(MenuViewport, {
-        BackgroundColor3 = 'BackColor';
-    });
+    pcall(function()
+        Library:AddToRegistry(MenuViewport, {
+            BackgroundColor3 = 'BackColor';
+        });
+    end)
+
     local MenuWorld = Instance.new('WorldModel')
     MenuWorld.Parent = MenuViewport
 
@@ -3715,7 +3719,7 @@ function Library:CreateWindow(...)
         Item = nil;
         ItemName = Library.ItemType or 'Unnamed Enhancements';
         Conn = nil;
-        Source = nil; -- optional folder to search models in
+        Source = nil;
     }
     Library.MenuBackground = MenuBgState
     Library.MenuViewport = MenuViewport
@@ -3723,22 +3727,26 @@ function Library:CreateWindow(...)
     local function styleBackgroundItem(obj)
         if not obj then return end
         local function stylePart(p)
-            if not p:IsA('BasePart') then return end
-            p.Color = Library.SwordColor or Color3.new(1,1,1)
-            p.Material = Library.SwordMaterial or Enum.Material.Neon
-            p.Transparency = Library.SwordTransparency or 0
-            p.Reflectance = Library.SwordReflectance or 0
-            p.Anchored = true
-            p.CanCollide = false
-            p.CastShadow = false
+            if not p or not p:IsA('BasePart') then return end
+            pcall(function()
+                p.Color = Library.SwordColor or Color3.new(1,1,1)
+                p.Material = Library.SwordMaterial or Enum.Material.Neon
+                p.Transparency = Library.SwordTransparency or 0
+                p.Reflectance = Library.SwordReflectance or 0
+                p.Anchored = true
+                p.CanCollide = false
+                p.CastShadow = false
+            end)
         end
-        if obj:IsA('BasePart') then
-            stylePart(obj)
-        elseif obj:IsA('Model') then
-            for _, d in ipairs(obj:GetDescendants()) do
-                stylePart(d)
+        pcall(function()
+            if obj:IsA('BasePart') then
+                stylePart(obj)
+            elseif obj:IsA('Model') then
+                for _, d in ipairs(obj:GetDescendants()) do
+                    stylePart(d)
+                end
             end
-        end
+        end)
     end
 
     local function clearBackgroundItem()
@@ -3748,7 +3756,6 @@ function Library:CreateWindow(...)
         end
     end
 
-    -- Built-in UE shapes (no external models required)
     local function makePart(props)
         local p = Instance.new('Part')
         p.Anchored = true
@@ -3758,175 +3765,198 @@ function Library:CreateWindow(...)
         p.BottomSurface = Enum.SurfaceType.Smooth
         p.Material = Enum.Material.Neon
         p.Color = Color3.new(1,1,1)
-        for k,v in pairs(props or {}) do p[k] = v end
+        if type(props) == "table" then
+            for k,v in pairs(props) do
+                pcall(function() p[k] = v end)
+            end
+        end
         return p
     end
 
     local function buildBuiltinItem(name)
-        local model = Instance.new('Model')
-        model.Name = name
+        local ok, model = pcall(function()
+            local model = Instance.new('Model')
+            model.Name = tostring(name or "Item")
 
-        local function add(part)
-            part.Parent = model
-            return part
-        end
-
-        if name == 'Sword' or name == 'Unnamed Enhancements' then
-            -- blade
-            add(makePart({ Size = Vector3.new(0.25, 3.2, 0.08), CFrame = CFrame.new(0, 0.6, 0) }))
-            -- tip
-            add(makePart({ Size = Vector3.new(0.2, 0.4, 0.08), CFrame = CFrame.new(0, 2.4, 0) }))
-            -- guard
-            add(makePart({ Size = Vector3.new(1.1, 0.18, 0.18), CFrame = CFrame.new(0, -1.05, 0) }))
-            -- handle
-            add(makePart({ Size = Vector3.new(0.22, 0.9, 0.22), CFrame = CFrame.new(0, -1.6, 0) }))
-            -- pommel
-            add(makePart({ Size = Vector3.new(0.32, 0.28, 0.32), CFrame = CFrame.new(0, -2.15, 0), Shape = Enum.PartType.Ball }))
-        elseif name == 'Cross' or name == 'Catholic Cross' then
-            add(makePart({ Size = Vector3.new(0.35, 3.2, 0.2), CFrame = CFrame.new(0, 0, 0) }))
-            add(makePart({ Size = Vector3.new(2.0, 0.35, 0.2), CFrame = CFrame.new(0, 0.7, 0) }))
-        elseif name == 'Orthodox Cross' then
-            add(makePart({ Size = Vector3.new(0.3, 3.4, 0.18), CFrame = CFrame.new(0, 0, 0) }))
-            add(makePart({ Size = Vector3.new(1.8, 0.28, 0.18), CFrame = CFrame.new(0, 0.85, 0) }))
-            add(makePart({ Size = Vector3.new(1.1, 0.22, 0.18), CFrame = CFrame.new(0, 1.55, 0) }))
-            add(makePart({ Size = Vector3.new(1.0, 0.2, 0.18), CFrame = CFrame.new(0, -1.15, 0) * CFrame.Angles(0, 0, math.rad(-18)) }))
-        elseif name == 'Heart' then
-            add(makePart({ Size = Vector3.new(1.1, 1.1, 0.35), CFrame = CFrame.new(-0.45, 0.35, 0), Shape = Enum.PartType.Ball }))
-            add(makePart({ Size = Vector3.new(1.1, 1.1, 0.35), CFrame = CFrame.new(0.45, 0.35, 0), Shape = Enum.PartType.Ball }))
-            add(makePart({ Size = Vector3.new(1.6, 1.4, 0.35), CFrame = CFrame.new(0, -0.35, 0) }))
-        else
-            model:Destroy()
-            return nil
-        end
-
-        local pp = model:FindFirstChildWhichIsA('BasePart')
-        if pp then model.PrimaryPart = pp end
-        return model
-    end
-
-    local function findSourceItem(name)
-        if not name or name == '' or name == 'None' then return nil end
-        if MenuBgState.Source then
-            local f = MenuBgState.Source:FindFirstChild(name, true)
-            if f then return f end
-        end
-        local places = {
-            game:GetService('ReplicatedStorage'),
-            game:GetService('ReplicatedStorage'):FindFirstChild('Modules'),
-            game:GetService('Lighting'),
-        }
-        for _, root in ipairs(places) do
-            if root then
-                local f = root:FindFirstChild(name, true)
-                if f and (f:IsA('Model') or f:IsA('BasePart') or f:IsA('MeshPart')) then
-                    return f
-                end
+            local function add(part)
+                part.Parent = model
+                return part
             end
-        end
+
+            if name == 'Sword' or name == 'Unnamed Enhancements' then
+                add(makePart({ Size = Vector3.new(0.25, 3.2, 0.08), CFrame = CFrame.new(0, 0.6, 0) }))
+                add(makePart({ Size = Vector3.new(0.2, 0.4, 0.08), CFrame = CFrame.new(0, 2.4, 0) }))
+                add(makePart({ Size = Vector3.new(1.1, 0.18, 0.18), CFrame = CFrame.new(0, -1.05, 0) }))
+                add(makePart({ Size = Vector3.new(0.22, 0.9, 0.22), CFrame = CFrame.new(0, -1.6, 0) }))
+                add(makePart({ Size = Vector3.new(0.32, 0.28, 0.32), CFrame = CFrame.new(0, -2.15, 0), Shape = Enum.PartType.Ball }))
+            elseif name == 'Cross' or name == 'Catholic Cross' then
+                add(makePart({ Size = Vector3.new(0.35, 2.8, 0.2), CFrame = CFrame.new(0, 0.2, 0) }))
+                add(makePart({ Size = Vector3.new(1.6, 0.35, 0.2), CFrame = CFrame.new(0, 0.9, 0) }))
+            elseif name == 'Orthodox Cross' then
+                add(makePart({ Size = Vector3.new(0.3, 2.9, 0.18), CFrame = CFrame.new(0, 0.15, 0) }))
+                add(makePart({ Size = Vector3.new(1.5, 0.28, 0.18), CFrame = CFrame.new(0, 0.95, 0) }))
+                add(makePart({ Size = Vector3.new(0.9, 0.22, 0.18), CFrame = CFrame.new(0, -0.7, 0) * CFrame.Angles(0, 0, math.rad(25)) }))
+            elseif name == 'Heart' then
+                local left = makePart({ Size = Vector3.new(0.9, 0.9, 0.35), Shape = Enum.PartType.Ball, CFrame = CFrame.new(-0.35, 0.35, 0) })
+                local right = makePart({ Size = Vector3.new(0.9, 0.9, 0.35), Shape = Enum.PartType.Ball, CFrame = CFrame.new(0.35, 0.35, 0) })
+                local bottom = makePart({ Size = Vector3.new(1.35, 1.1, 0.35), CFrame = CFrame.new(0, -0.35, 0) })
+                add(left); add(right); add(bottom)
+            else
+                -- fallback simple diamond / cube
+                add(makePart({ Size = Vector3.new(1.4, 1.4, 1.4), CFrame = CFrame.Angles(math.rad(45), math.rad(45), 0) }))
+            end
+
+            -- set primary part for PivotTo
+            local first = model:FindFirstChildWhichIsA("BasePart")
+            if first then
+                model.PrimaryPart = first
+            end
+            return model
+        end)
+        if ok then return model end
         return nil
     end
 
+    local function findSourceItem(name)
+        -- optional external source support (kept for compatibility)
+        local src = MenuBgState.Source
+        if not src then return nil end
+        local ok, result = pcall(function()
+            if typeof(src) == "Instance" then
+                local found = src:FindFirstChild(name, true)
+                if found then return found:Clone() end
+            end
+            return nil
+        end)
+        return ok and result or nil
+    end
+
     local function setBackgroundItem(nameOrInstance)
-        clearBackgroundItem()
-        if typeof(nameOrInstance) == 'Instance' then
-            local clone = nameOrInstance:Clone()
-            clone.Parent = MenuWorld
-            if clone:IsA('Model') then
-                if not clone.PrimaryPart then
-                    local pp = clone:FindFirstChildWhichIsA('BasePart', true)
-                    if pp then clone.PrimaryPart = pp end
-                end
-                if clone.PrimaryPart then
-                    clone:PivotTo(CFrame.new(0, 0, 0))
-                end
-            elseif clone:IsA('BasePart') then
-                clone.CFrame = CFrame.new(0, 0, 0)
+        local success = false
+        pcall(function()
+            clearBackgroundItem()
+
+            if typeof(nameOrInstance) == "Instance" then
+                local clone = nameOrInstance:Clone()
+                clone.Parent = MenuWorld
+                styleBackgroundItem(clone)
+                MenuBgState.Item = clone
+                MenuBgState.ItemName = clone.Name
+                Library.ItemType = clone.Name
+                MenuViewport.Visible = true
+                success = true
+                return
             end
-            styleBackgroundItem(clone)
-            MenuBgState.Item = clone
-            MenuBgState.ItemName = clone.Name
-            MenuViewport.Visible = true
-            return true
-        end
-        local name = tostring(nameOrInstance or 'None')
-        MenuBgState.ItemName = name
-        Library.ItemType = name
-        if name == 'None' or name == '' then
-            MenuViewport.Visible = MenuBgState.Enabled
-            return false
-        end
-        -- Prefer built-in UE shapes so background always works
-        local builtin = buildBuiltinItem(name)
-        if builtin then
-            builtin.Parent = MenuWorld
-            if builtin.PrimaryPart then
-                builtin:PivotTo(CFrame.new(0, 0, 0))
+
+            local name = tostring(nameOrInstance or "None")
+            MenuBgState.ItemName = name
+            Library.ItemType = name
+
+            if name == "None" or name == "" then
+                MenuViewport.Visible = MenuBgState.Enabled
+                success = false
+                return
             end
-            styleBackgroundItem(builtin)
-            MenuBgState.Item = builtin
-            MenuViewport.Visible = true
-            return true
-        end
-        local src = findSourceItem(name)
-        if not src then
-            return false
-        end
-        return setBackgroundItem(src)
+
+            -- Prefer built-in shapes (always works, no external assets needed)
+            local builtin = buildBuiltinItem(name)
+            if builtin then
+                builtin.Parent = MenuWorld
+                pcall(function()
+                    if builtin.PrimaryPart then
+                        builtin:PivotTo(CFrame.new(0, 0, 0))
+                    end
+                end)
+                styleBackgroundItem(builtin)
+                MenuBgState.Item = builtin
+                MenuViewport.Visible = true
+                success = true
+                return
+            end
+
+            local src = findSourceItem(name)
+            if src then
+                src.Parent = MenuWorld
+                styleBackgroundItem(src)
+                MenuBgState.Item = src
+                MenuViewport.Visible = true
+                success = true
+            end
+        end)
+        return success
     end
+
     Library.SetMenuBackgroundItem = function(_, nameOrInstance)
-        return setBackgroundItem(nameOrInstance)
+        local ok, res = pcall(setBackgroundItem, nameOrInstance)
+        return ok and res
     end
+
     function Library:SetMenuBackgroundSource(folder)
         MenuBgState.Source = folder
-        if MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
-            setBackgroundItem(MenuBgState.ItemName)
+        if MenuBgState.ItemName and MenuBgState.ItemName ~= "None" then
+            pcall(setBackgroundItem, MenuBgState.ItemName)
         end
     end
+
     function Library:SetMenuBackgroundEnabled(on)
         MenuBgState.Enabled = on and true or false
         MenuBgHolder.Visible = MenuBgState.Enabled
         if not MenuBgState.Enabled then
             clearBackgroundItem()
-        elseif MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
-            setBackgroundItem(MenuBgState.ItemName)
+        elseif MenuBgState.ItemName and MenuBgState.ItemName ~= "None" then
+            pcall(setBackgroundItem, MenuBgState.ItemName)
         end
     end
+
     function Library:SetSwordSpeed(speed)
         Library.SwordSpeed = tonumber(speed) or 0.15
     end
+
     function Library:SetBackTransparency(v)
         v = math.clamp(tonumber(v) or 0.7, 0, 1)
         Library.BackTransparency = v
-        MenuViewport.BackgroundTransparency = v
-    end
-    function Library:RefreshMenuBackgroundStyle()
-        styleBackgroundItem(MenuBgState.Item)
-        MenuViewport.BackgroundColor3 = Library.BackColor or Color3.new(0,0,0)
-        MenuViewport.BackgroundTransparency = Library.BackTransparency or 0.7
+        pcall(function()
+            MenuViewport.BackgroundTransparency = v
+        end)
     end
 
-    -- rotation loop (UE: CFrame.Angles(0, SwordSpeed/10 * dt * 60, 0))
-    if MenuBgState.Conn then pcall(function() MenuBgState.Conn:Disconnect() end) end
-    MenuBgState.Conn = game:GetService('RunService').RenderStepped:Connect(function(dt)
+    function Library:RefreshMenuBackgroundStyle()
+        pcall(function()
+            styleBackgroundItem(MenuBgState.Item)
+            MenuViewport.BackgroundColor3 = Library.BackColor or Color3.new(0,0,0)
+            MenuViewport.BackgroundTransparency = Library.BackTransparency or 0.7
+        end)
+    end
+
+    -- rotation loop (safe)
+    if MenuBgState.Conn then
+        pcall(function() MenuBgState.Conn:Disconnect() end)
+    end
+    MenuBgState.Conn = game:GetService("RunService").RenderStepped:Connect(function(dt)
         if not MenuBgState.Enabled then return end
         local item = MenuBgState.Item
         if not item then return end
         local speed = (Library.SwordSpeed or 0.15) / 10 * dt * 60
         local step = CFrame.Angles(0, speed, 0)
-        if item:IsA('Model') then
-            pcall(function() item:PivotTo(item:GetPivot() * step) end)
-        elseif item:IsA('BasePart') then
-            item.CFrame = item.CFrame * step
-        end
+        pcall(function()
+            if item:IsA("Model") then
+                local pivot = item:GetPivot()
+                item:PivotTo(pivot * step)
+            elseif item:IsA("BasePart") then
+                item.CFrame = item.CFrame * step
+            end
+        end)
     end)
 
-    -- UE default: show Unnamed Enhancements on open
+    -- UE default: show item on open (deferred + protected)
     if MenuBgState.Enabled then
         local initial = MenuBgState.ItemName
-        if not initial or initial == '' or initial == 'None' then
-            initial = 'Unnamed Enhancements'
+        if not initial or initial == "" or initial == "None" then
+            initial = "Unnamed Enhancements"
         end
-        task.defer(function() setBackgroundItem(initial) end)
+        task.defer(function()
+            pcall(setBackgroundItem, initial)
+        end)
     end
 
     local CornerCircle = Library:Create('Frame', {
