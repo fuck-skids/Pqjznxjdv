@@ -67,23 +67,12 @@ local ThemeManager = {} do
 			end
 		end
 
-		-- Apply all background settings (ported from working UE file)
-		pcall(function()
-			local L = self.Library
-			if not L then return end
-			if type(L.RefreshMenuBackgroundStyle) == "function" then
-				L:RefreshMenuBackgroundStyle()
-			end
-			if type(L.SetMenuBackgroundItem) == "function" and L.ItemType then
-				L:SetMenuBackgroundItem(L.ItemType)
-			end
-			if type(L.SetSwordSpeed) == "function" and L.SwordSpeed then
-				L:SetSwordSpeed(L.SwordSpeed)
-			end
-			if type(L.SetBackTransparency) == "function" and L.BackTransparency then
-				L:SetBackTransparency(L.BackTransparency)
-			end
-		end)
+		if self.Library.RefreshMenuBackgroundStyle then
+			pcall(function() self.Library:RefreshMenuBackgroundStyle() end)
+		end
+		if self.Library.SetMenuBackgroundItem and self.Library.ItemType then
+			pcall(function() self.Library:SetMenuBackgroundItem(self.Library.ItemType) end)
+		end
 
 		self:ThemeUpdate()
 	end
@@ -349,6 +338,18 @@ local ThemeManager = {} do
 				Max = 1,
 				Rounding = 2,
 			})
+			backgroundTab:AddDivider()
+			backgroundTab:AddToggle('UseBlur', {
+				Text = 'Use Blur',
+				Default = self.Library.UseBlur == true,
+			})
+			backgroundTab:AddSlider('BlurSize', {
+				Text = 'Blur Size',
+				Default = self.Library.BlurSize or 15,
+				Min = 0,
+				Max = 40,
+				Rounding = 0,
+			})
 		end
 
 		ThemeManager:LoadDefault()
@@ -376,19 +377,34 @@ local ThemeManager = {} do
 			end
 			if Options.ItemType then
 				L.ItemType = Options.ItemType.Value
-				if L.SetMenuBackgroundItem then
-					L:SetMenuBackgroundItem(Options.ItemType.Value)
+				if type(L.SetMenuBackgroundItem) == "function" then
+					pcall(function() L:SetMenuBackgroundItem(Options.ItemType.Value) end)
 				end
 			end
-			if L.RefreshMenuBackgroundStyle then
-				L:RefreshMenuBackgroundStyle()
+			if Options.UseBlur then
+				L.UseBlur = Options.UseBlur.Value == true
+				if type(L.UpdateBlur) == "function" then
+					pcall(function() L:UpdateBlur() end)
+				end
+			end
+			if Options.BlurSize then
+				L.BlurSize = Options.BlurSize.Value
+				if L.UseBlur and L.Toggled and L.BlurEffect then
+					pcall(function()
+						L.BlurEffect.Enabled = true
+						L.BlurEffect.Size = L.BlurSize
+					end)
+				end
+			end
+			if type(L.RefreshMenuBackgroundStyle) == "function" then
+				pcall(function() L:RefreshMenuBackgroundStyle() end)
 			end
 		end
 
 		for _, id in ipairs({
 			'BackgroundColor','MainColor','AccentColor','OutlineColor','FontColor','RiskColor',
 			'SwordColor','ItemType','SwordTransparency','SwordReflectance','SwordSpeed',
-			'SwordMaterial','BackColor','BackTransparency',
+			'SwordMaterial','BackColor','BackTransparency','UseBlur','BlurSize',
 		}) do
 			if Options[id] and Options[id].OnChanged then
 				Options[id]:OnChanged(UpdateTheme)
