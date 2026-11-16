@@ -52,8 +52,8 @@ local Library = {
     BackColor = Color3.fromRGB(0, 0, 0);
     BackTransparency = 0.7;
     NotifyConfig = {
-        Alignment = 'Left';
-        BarSide   = 'Left';
+        Alignment = 'Center';
+        BarSide   = 'Top';
         PositionX = 0;
         PositionY = 40;
         PositionXPct = nil;
@@ -3179,6 +3179,32 @@ function Library:NotifyBottomCenter(Text, Time)
         if Options.NotificationColorsFont then fontCol = Options.NotificationColorsFont.Value end
     end
 
+    local align = mainCfg.Alignment or cfg.Alignment or 'Center'
+    local barSide = mainCfg.BarSide or cfg.BarSide or 'Top'
+
+    -- position toast area by alignment
+    if Library.NotifLayoutBottom then
+        if align == 'Left' then
+            Library.NotifLayoutBottom.HorizontalAlignment = Enum.HorizontalAlignment.Left
+        elseif align == 'Right' then
+            Library.NotifLayoutBottom.HorizontalAlignment = Enum.HorizontalAlignment.Right
+        else
+            Library.NotifLayoutBottom.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        end
+    end
+    if Library.NotificationAreaBottom then
+        if align == 'Left' then
+            Library.NotificationAreaBottom.AnchorPoint = Vector2.new(0, 1)
+            Library.NotificationAreaBottom.Position = UDim2.new(0, 10, 1, -20)
+        elseif align == 'Right' then
+            Library.NotificationAreaBottom.AnchorPoint = Vector2.new(1, 1)
+            Library.NotificationAreaBottom.Position = UDim2.new(1, -10, 1, -20)
+        else
+            Library.NotificationAreaBottom.AnchorPoint = Vector2.new(0.5, 1)
+            Library.NotificationAreaBottom.Position = UDim2.new(0.5, 0, 1, -20)
+        end
+    end
+
     local Wrap = Library:Create('Frame', {
         BackgroundTransparency = 1;
         Size = UDim2.new(1, 0, 0, YSize);
@@ -3186,9 +3212,19 @@ function Library:NotifyBottomCenter(Text, Time)
         Parent = Library.NotificationAreaBottom;
     });
 
+    local outerAnchor = Vector2.new(0.5, 0.5)
+    local outerPos = UDim2.new(0.5, 0, 0.5, 0)
+    if align == 'Left' then
+        outerAnchor = Vector2.new(0, 0.5)
+        outerPos = UDim2.new(0, 0, 0.5, 0)
+    elseif align == 'Right' then
+        outerAnchor = Vector2.new(1, 0.5)
+        outerPos = UDim2.new(1, 0, 0.5, 0)
+    end
+
     local NotifyOuter = Library:Create('Frame', {
-        AnchorPoint = Vector2.new(0.5, 0.5);
-        Position = UDim2.new(0.5, 0, 0.5, 0);
+        AnchorPoint = outerAnchor;
+        Position = outerPos;
         BackgroundColor3 = Color3.new(0, 0, 0);
         BackgroundTransparency = t; -- full transparency control
         BorderColor3 = Color3.new(0, 0, 0);
@@ -3265,7 +3301,7 @@ function Library:NotifyBottomCenter(Text, Time)
         }, true);
     end
 
-    local barSide = cfg.BarSide or mainCfg.BarSide or 'Top'
+    -- barSide already set above from mainCfg/cfg (default Top)
     local AccentBar = Library:Create('Frame', {
         BackgroundColor3 = accentCol;
         BackgroundTransparency = t;
