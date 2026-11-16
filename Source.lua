@@ -4312,67 +4312,65 @@ function Library:CreateWindow(...)
         Library.Toggled = not Library.Toggled;
         ModalElement.Modal = Library.Toggled;
         Outer.Visible = Library.Toggled;
-        -- UE-style custom cursor (ImageLabel + shadow, asset 4292970642)
+        -- Custom cursor — exact UE follow logic
         if Library.Toggled and not Library.CursorLoopRunning then
             Library.CursorLoopRunning = true
             task.spawn(function()
+                -- UE always runs cursor while window is visible (ShowCustomCursor gates optional)
                 if Library.ShowCustomCursor == false then
                     Library.CursorLoopRunning = false
                     return
                 end
+
                 local previousMouseIconEnabled = InputService.MouseIconEnabled
                 local guiService = game:GetService('GuiService')
+
+                -- UE: cursorLayer parented to same parent as main ScreenGui
+                -- NO IgnoreGuiInset (default false) — required for correct Y math
                 local cursorLayer = Instance.new('ScreenGui')
                 cursorLayer.Name = 'cursorLayer'
                 cursorLayer.DisplayOrder = 10000
                 cursorLayer.ResetOnSpawn = false
-                cursorLayer.IgnoreGuiInset = true
-                pcall(function() cursorLayer.Parent = ScreenGui.Parent end)
-                if not cursorLayer.Parent then
-                    cursorLayer.Parent = ScreenGui
-                end
+                cursorLayer.Parent = ScreenGui.Parent
 
-                local cursorImage = Instance.new('ImageLabel')
-                cursorImage.Name = 'Cursor'
+                local cursorImage = Instance.new('ImageLabel', cursorLayer)
                 cursorImage.Image = 'http://www.roblox.com/asset/?id=4292970642'
                 cursorImage.BackgroundTransparency = 1
                 cursorImage.ZIndex = 125
-                cursorImage.Size = UDim2.fromOffset(17, 17)
-                cursorImage.Rotation = -45
-                cursorImage.Parent = cursorLayer
 
-                local cursorShadow = Instance.new('ImageLabel')
-                cursorShadow.Name = 'CursorShadow'
+                local cursorShadow = Instance.new('ImageLabel', cursorLayer)
                 cursorShadow.Image = 'http://www.roblox.com/asset/?id=4292970642'
-                cursorShadow.ImageColor3 = Color3.new(0, 0, 0)
+                cursorShadow.ImageColor3 = Color3.new() -- black
                 cursorShadow.BackgroundTransparency = 1
                 cursorShadow.ZIndex = 124
-                cursorShadow.Size = UDim2.fromOffset(19, 19)
-                cursorShadow.Rotation = -45
-                cursorShadow.Parent = cursorLayer
 
-                while Library.Toggled and ScreenGui.Parent and cursorLayer.Parent do
-                    if Library.ShowCustomCursor == false then
-                        break
-                    end
+                -- UE exact sizes / rotation
+                cursorImage.Size, cursorShadow.Size = UDim2.fromOffset(17, 17), UDim2.fromOffset(19, 19)
+                cursorImage.Rotation, cursorShadow.Rotation = -45, -45
+
+                -- UE: while windowVisible and screenGui.Parent
+                while Library.Toggled and ScreenGui.Parent do
                     InputService.MouseIconEnabled = false
+
                     local mouseLocation = InputService:GetMouseLocation()
-                    local insetY = 0
-                    pcall(function()
-                        insetY = guiService:GetGuiInset().Y
-                    end)
-                    -- UE: Position = mouse - GuiInset.Y - 1
-                    local cursorPosition = UDim2.fromOffset(mouseLocation.X, mouseLocation.Y - insetY - 1)
+                    -- UE exact: UDim2.fromOffset(mouse.X, mouse.Y - GuiInset.Y - 1)
+                    local cursorPosition = UDim2.fromOffset(
+                        mouseLocation.X,
+                        mouseLocation.Y - guiService:GetGuiInset().Y - 1
+                    )
+
                     cursorImage.ImageColor3 = Library.AccentColor
-                    cursorImage.Position = cursorPosition
-                    cursorShadow.Position = cursorPosition - UDim2.fromOffset(1, 1)
+                    -- UE exact dual assign: image at pos, shadow at pos - (1, 1)
+                    cursorImage.Position, cursorShadow.Position =
+                        cursorPosition, cursorPosition - UDim2.fromOffset(1, 1)
+
                     RenderStepped:Wait()
                 end
 
                 InputService.MouseIconEnabled = previousMouseIconEnabled
-                pcall(function() cursorImage:Destroy() end)
-                pcall(function() cursorShadow:Destroy() end)
-                pcall(function() cursorLayer:Destroy() end)
+                cursorImage:Destroy()
+                cursorShadow:Destroy()
+                cursorLayer:Destroy()
                 Library.CursorLoopRunning = false
             end)
         end
