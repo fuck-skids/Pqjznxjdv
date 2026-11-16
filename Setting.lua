@@ -582,19 +582,20 @@ end
 	-- Call: SaveManager:BuildUESettings(Tabs.Settings)
 	-- ============================================================
 
+
 	-- ============================================================
-	-- UE Settings UI (exact controls from Unnamed)
-	-- Menu: bind, keybind menu, transparency, mode
-	-- Notifications: clips, colors, position, transparency, style
-	-- Call: SaveManager:BuildUESettings(Tabs.Settings)
+	-- UE Settings — exact structure: LeftTabbox → Menu + Notifications
 	-- ============================================================
 	function SaveManager:BuildUESettings(tab)
 		assert(self.Library, 'Must set SaveManager.Library')
 		local Library = self.Library
 
-		-- ========== MENU ==========
-		local Menu = tab:AddLeftGroupbox('Menu')
+		-- UE uses a left tabbox with two tabs (not groupboxes)
+		local tabbox = tab:AddLeftTabbox('UESettings')
+		local Menu = tabbox:AddTab('Menu')
+		local Notif = tabbox:AddTab('Notifications')
 
+		-- ========== MENU TAB ==========
 		Menu:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', {
 			Default = 'RightShift',
 			NoUI = true,
@@ -608,19 +609,11 @@ end
 			Tooltip = 'Shows Keybinds',
 			Callback = function(v)
 				Library.KeypickerListVisible = v and true or false
+				if Library.KeybindFrame then
+					Library.KeybindFrame.Visible = v and true or false
+				end
 				if Library.RefreshKeybinds then
 					pcall(function() Library:RefreshKeybinds() end)
-				end
-				if Library.KeybindFrame then
-					if not v then
-						Library.KeybindFrame.Visible = false
-					else
-						-- force show; RefreshKeybinds may hide if empty, but at least try
-						Library.KeybindFrame.Visible = true
-						if Library.RefreshKeybinds then
-							pcall(function() Library:RefreshKeybinds() end)
-						end
-					end
 				end
 			end,
 		})
@@ -634,7 +627,6 @@ end
 			Rounding = 0,
 			Compact = true,
 			Callback = function(v)
-				-- UE: Transparency = 1 - (value/100) on KeybindFrame + inner Frame
 				local t = 1 - ((tonumber(v) or 100) / 100)
 				if Library.SetKeybindMenuTransparency then
 					Library:SetKeybindMenuTransparency(v)
@@ -652,24 +644,20 @@ end
 		Menu:AddDropdown('KeybindMenuValue', {
 			Text = 'Keybind Menu Mode',
 			Values = { 'Active', 'Toggled', 'All' },
-			Default = 2, -- Toggled (UE default)
+			Default = 2, -- Toggled
 			Multi = false,
 			Callback = function(v)
 				Library.KeypickerListMode = v
+				Library.KeybindMode = v
 				if Library.SetKeybindMode then
 					pcall(function() Library:SetKeybindMode(v) end)
-				else
-					Library.KeybindMode = v
-					if Library.RefreshKeybinds then
-						pcall(function() Library:RefreshKeybinds() end)
-					end
+				elseif Library.RefreshKeybinds then
+					pcall(function() Library:RefreshKeybinds() end)
 				end
 			end,
 		})
 
-		-- ========== NOTIFICATIONS ==========
-		local Notif = tab:AddLeftGroupbox('Notifications')
-
+		-- ========== NOTIFICATIONS TAB ==========
 		Notif:AddToggle('NotificationClips', {
 			Text = 'Clip Descendants',
 			Default = true,
@@ -686,9 +674,9 @@ end
 			end,
 		})
 
-		local clipBox = Notif:AddDependencyBox()
-		clipBox:SetupDependencies({ { Toggles.NotificationClips, true } })
-		clipBox:AddSlider('NotificationClipsDistance', {
+		local clipDep = Notif:AddDependencyBox()
+		clipDep:SetupDependencies({ { Toggles.NotificationClips, true } })
+		clipDep:AddSlider('NotificationClipsDistance', {
 			Text = 'Clip Past Distance',
 			Default = 200,
 			Min = 100,
@@ -700,7 +688,8 @@ end
 				Library.NotifyConfig = Library.NotifyConfig or {}
 				Library.NotifyConfig.ClipDistance = v
 				if Library.NotificationArea and Library.NotifyConfig.ClipDescendants then
-					Library.NotificationArea.Size = UDim2.new(0, 2560, 0, v) -- UE uses width 2560
+					-- UE sets Size = UDim2.new(0, 2560, 0, distance)
+					Library.NotificationArea.Size = UDim2.new(0, 2560, 0, v)
 				end
 				if Library.UpdateNotifAlignment then
 					Library.UpdateNotifAlignment()
@@ -711,26 +700,50 @@ end
 		Notif:AddToggle('NotificationColors', {
 			Text = 'Force Color',
 			Default = false,
+			Tooltip = 'forces the notification colors based on the config, not the theme',
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
 				Library.NotifyConfig.ForceColor = v and true or false
 			end,
 		})
 
-		Notif:AddLabel('Main Color'):AddColorPicker('NotificationColorsMain', {
-			Default = Library.MainColor or Color3.fromRGB(30, 30, 30),
-		})
-		Notif:AddLabel('Accent Color'):AddColorPicker('NotificationColorsAccent', {
-			Default = Library.AccentColor or Color3.fromRGB(0, 150, 255),
-		})
-		Notif:AddLabel('Outline Color'):AddColorPicker('NotificationColorsOutline', {
-			Default = Library.OutlineColor or Color3.fromRGB(60, 60, 60),
-		})
-		Notif:AddLabel('Font Color'):AddColorPicker('NotificationColorsFont', {
-			Default = Library.FontColor or Color3.fromRGB(255, 255, 255),
-		})
+		-- Color pickers attached to Force Color toggle (UE loops Main/Accent/Outline/Font)
+		local forceToggle = Toggles.NotificationColors
+		if forceToggle and forceToggle.AddColorPicker then
+			forceToggle:AddColorPicker('NotificationColorsMain', {
+				Default = Library.MainColor or Color3.fromRGB(30, 30, 30),
+				Title = 'Main Color',
+			})
+			forceToggle:AddColorPicker('NotificationColorsAccent', {
+				Default = Library.AccentColor or Color3.fromRGB(0, 150, 255),
+				Title = 'Accent Color',
+			})
+			forceToggle:AddColorPicker('NotificationColorsOutline', {
+				Default = Library.OutlineColor or Color3.fromRGB(60, 60, 60),
+				Title = 'Outline Color',
+			})
+			forceToggle:AddColorPicker('NotificationColorsFont', {
+				Default = Library.FontColor or Color3.fromRGB(255, 255, 255),
+				Title = 'Font Color',
+			})
+		else
+			Notif:AddLabel('Main Color'):AddColorPicker('NotificationColorsMain', {
+				Default = Library.MainColor or Color3.fromRGB(30, 30, 30),
+			})
+			Notif:AddLabel('Accent Color'):AddColorPicker('NotificationColorsAccent', {
+				Default = Library.AccentColor or Color3.fromRGB(0, 150, 255),
+			})
+			Notif:AddLabel('Outline Color'):AddColorPicker('NotificationColorsOutline', {
+				Default = Library.OutlineColor or Color3.fromRGB(60, 60, 60),
+			})
+			Notif:AddLabel('Font Color'):AddColorPicker('NotificationColorsFont', {
+				Default = Library.FontColor or Color3.fromRGB(255, 255, 255),
+			})
+		end
 
-		Notif:AddButton('copy colors', function()
+		local colorDep = Notif:AddDependencyBox()
+		colorDep:SetupDependencies({ { Toggles.NotificationColors, true } })
+		colorDep:AddButton('copy colors', function()
 			if Options.NotificationColorsMain and Library.MainColor then
 				Options.NotificationColorsMain:SetValueRGB(Library.MainColor)
 			end
@@ -789,19 +802,15 @@ end
 				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
 				Library.NotifyConfig.Transparency = v
 				Library.NotifyCenterConfig.Transparency = v
-				if Library.SetNotifyTransparency then
-					Library:SetNotifyTransparency(v)
-				end
-				if Library.SetNotifyCenterTransparency then
-					Library:SetNotifyCenterTransparency(v)
-				end
+				if Library.SetNotifyTransparency then Library:SetNotifyTransparency(v) end
+				if Library.SetNotifyCenterTransparency then Library:SetNotifyCenterTransparency(v) end
 			end,
 		})
 
 		Notif:AddDropdown('NotificationAnchorStyle', {
 			Text = 'Alignment',
 			Values = { 'Left', 'Right', 'Center' },
-			Default = 3, -- Center (UE default)
+			Default = 3, -- Center
 			Multi = false,
 			Tooltip = 'how the text is positioned',
 			Callback = function(v)
@@ -814,7 +823,7 @@ end
 		Notif:AddDropdown('NotificationBarStyle', {
 			Text = 'Bar Side',
 			Values = { 'Left', 'Right', 'Top', 'Bottom' },
-			Default = 4, -- Bottom (UE default)
+			Default = 4, -- Bottom
 			Multi = false,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
@@ -825,18 +834,15 @@ end
 		Notif:AddDropdown('NotificationStyleSortOrder', {
 			Text = 'Sort Order',
 			Values = { 'Text Length', 'Default' },
-			Default = 2, -- Default
+			Default = 2,
 			Multi = false,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
 				Library.NotifyConfig.SortOrder = v
-				-- UE: UIListLayout.SortOrder = Name if Text Length else LayoutOrder
 				if Library.NotifLayout then
-					if v == 'Text Length' then
-						Library.NotifLayout.SortOrder = Enum.SortOrder.Name
-					else
-						Library.NotifLayout.SortOrder = Enum.SortOrder.LayoutOrder
-					end
+					Library.NotifLayout.SortOrder = (v == 'Text Length')
+						and Enum.SortOrder.Name
+						or Enum.SortOrder.LayoutOrder
 				end
 			end,
 		})
@@ -846,6 +852,17 @@ end
 		end)
 
 		self:SetIgnoreIndexes({ 'MenuKeybind' })
+
+		-- Apply initial keybind visibility
+		Library.KeypickerListVisible = true
+		if Library.KeybindFrame then
+			Library.KeybindFrame.Visible = true
+		end
+		if Library.RefreshKeybinds then
+			task.defer(function()
+				pcall(function() Library:RefreshKeybinds() end)
+			end)
+		end
 	end
 
 
