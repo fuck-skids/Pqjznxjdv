@@ -3,6 +3,7 @@ local httpService = game:GetService('HttpService')
 local SaveManager = {} do
 	SaveManager.Folder = 'LinoriaLibSettings'
 	SaveManager.Ignore = {}
+	-- Community configs (empty by default; fill from main script)
 	SaveManager.CommunityConfigs = {}
 	SaveManager.Parser = {
 		Toggle = {
@@ -55,7 +56,6 @@ local SaveManager = {} do
 				end
 			end,
 		},
-
 		Input = {
 			Save = function(idx, object)
 				return { type = 'Input', idx = idx, text = object.Value }
@@ -75,12 +75,12 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:SetFolder(folder)
-		self.Folder = folder;
+		self.Folder = folder
 		self:BuildFolderTree()
 	end
 
 	function SaveManager:Save(name)
-		if (not name) then
+		if not name then
 			return false, 'no config file is selected'
 		end
 
@@ -113,7 +113,7 @@ local SaveManager = {} do
 	end
 
 	function SaveManager:Load(name)
-		if (not name) then
+		if not name then
 			return false, 'no config file is selected'
 		end
 		
@@ -123,7 +123,7 @@ local SaveManager = {} do
 		local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(file))
 		if not success then return false, 'decode error' end
 
-		for _, option in next, decoded.objects do
+		for idx, option in next, decoded.objects do
 			if self.Parser[option.type] then
 				task.spawn(function() self.Parser[option.type].Load(option.idx, option) end) -- task.spawn() so the config loading wont get stuck.
 			end
@@ -198,7 +198,6 @@ local SaveManager = {} do
 		end
 	end
 
-
 	function SaveManager:BuildConfigSection(tab)
 		assert(self.Library, 'Must set SaveManager.Library')
 
@@ -266,7 +265,202 @@ local SaveManager = {} do
 			SaveManager.AutoloadLabel:SetText('Current autoload config: ' .. name)
 		end
 
+		-- Build Cloud Upload section directly below Configuration on the right side
+		self:BuildUploadSection(tab)
+		-- community configs (empty until RegisterCommunityConfig from main script)
+		pcall(function() self:BuildCommunitySection(tab) end)
+
 		SaveManager:SetIgnoreIndexes({ 'SaveManager_ConfigList', 'SaveManager_ConfigName' })
+	end
+
+	-- ── Cloud / Store Config Upload System ────────────────────────
+	local STORE_URL = "https://config-hub--z1bje.replit.app/api"
+	local RATE_FILE = "creepcc/entities/zone_last_upload.txt"
+	local HWID_FILE = "creepcc/entities/zone_hwid.txt"
+
+	local function ensureDirectories()
+		if not isfolder("creepcc") then pcall(makefolder, "creepcc") end
+		if not isfolder("creepcc/entities") then pcall(makefolder, "creepcc/entities") end
+	end
+
+	local function execRequest(options)
+		local fn = (syn and syn.request) or (http and http.request) or (type(request) == "function" and request) or nil
+		if not fn then return nil end
+		local ok, res = pcall(fn, options)
+		return (ok and res) or nil
+	end
+
+	local function storePost(path, body)
+		local res = execRequest({
+			Url = STORE_URL .. path,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = httpService:JSONEncode(body),
+		})
+		if res then return res.StatusCode, res.Body end
+		return nil, nil
+	end
+
+	local function getHWID()
+		ensureDirectories()
+		if isfile(HWID_FILE) then
+			local cached = readfile(HWID_FILE)
+			if cached and #cached > 4 then return cached end
+		end
+		local id = (type(syn) == "table" and type(syn.get_hwid) == "function" and syn.get_hwid())
+			or (type(get_hwid) == "function" and get_hwid())
+			or tostring(game:GetService("Players").LocalPlayer.UserId)
+		pcall(function() writefile(HWID_FILE, tostring(id)) end)
+		return tostring(id)
+	end
+
+	local HOUR = 3600
+	local function getSecondsUntilNextUpload()
+		ensureDirectories()
+		if not isfile(RATE_FILE) then return 0 end
+		local lastTime = tonumber(readfile(RATE_FILE))
+		if not lastTime then return 0 end
+		local elapsed = os.time() - lastTime
+		return elapsed >= HOUR and 0 or (HOUR - elapsed)
+	end
+
+	local function markUploadTime()
+		ensureDirectories()
+		pcall(function() writefile(RATE_FILE, tostring(os.time())) end)
+	end
+
+	function SaveManager:BuildUploadSection(tab)
+		assert(self.Library, 'Must set SaveManager.Library')
+
+		local UploadGroup = tab:AddRightGroupbox("Upload")
+
+		UploadGroup:AddInput("UploadName", {
+			Text = "Config Name",
+			Default = "",
+			Placeholder = "e.g. my_rage_config",
+		})
+		UploadGroup:AddInput("UploadAuthor", {
+			Text = "Your Name",
+			Default = "",
+			Placeholder = "your username",
+		})
+		UploadGroup:AddInput("UploadDesc", {
+			Text = "Description",
+			Default = "",
+			Placeholder = "optional",
+		})
+
+		local localCfgDropdown = nil
+		local function refreshLocalConfigs()
+			local cfgs = self:RefreshConfigList() or {}
+			if localCfgDropdown then
+				localCfgDropdown:SetValues(cfgs)
+				if #cfgs > 0 then
+					localCfgDropdown:SetValue(cfgs[1])
+				end
+			end
+		end
+
+		localCfgDropdown = UploadGroup:AddDropdown("UploadLocalDropdown", {
+			Text = "Select Config",
+			Default = 1,
+			Values = self:RefreshConfigList() or { "" },
+		})
+
+		UploadGroup:AddButton("Refresh Configs", function()
+			refreshLocalConfigs()
+			self.Library:Notify("Local config list refreshed")
+		end)
+
+		UploadGroup:AddButton("Upload to Store", function()
+			local selectedCfg = Options.UploadLocalDropdown.Value or ""
+			local name = Options.UploadName.Value or ""
+			local author = Options.UploadAuthor.Value or ""
+			local desc = Options.UploadDesc.Value or ""
+
+			if selectedCfg == "" then
+				self.Library:Notify("Select a local config first")
+				return
+			end
+			if name == "" then
+				self.Library:Notify("Enter a config name")
+				return
+			end
+			if author == "" then
+				self.Library:Notify("Enter your name")
+				return
+			end
+
+			local wait = getSecondsUntilNextUpload()
+			if wait > 0 then
+				local mins = math.ceil(wait / 60)
+				self.Library:Notify(string.format("Rate limited — wait %d more minute%s", mins, mins == 1 and "" or "s"))
+				return
+			end
+
+			local filePath = self.Folder .. "/settings/" .. selectedCfg .. ".json"
+			if not isfile(filePath) then
+				self.Library:Notify("Config file not found: " .. selectedCfg)
+				return
+			end
+
+			local ok2, configData = pcall(function() return httpService:JSONDecode(readfile(filePath)) end)
+			if not ok2 or not configData then
+				self.Library:Notify("Failed to read config file")
+				return
+			end
+
+			local status, raw = storePost("/configs", {
+				name = name,
+				author = author,
+				description = desc,
+				hwid = getHWID(),
+				data = configData,
+			})
+
+			if not raw then
+				self.Library:Notify("Upload failed — no response")
+				return
+			end
+
+			local ok3, decoded = pcall(function() return httpService:JSONDecode(raw) end)
+			if status == 429 then
+				self.Library:Notify((ok3 and decoded and decoded.error) or "Rate limited")
+				return
+			end
+
+			if status == 201 and ok3 and decoded and decoded.id then
+				markUploadTime()
+				self.Library:Notify(string.format("Uploaded! ID %d — share with friends", decoded.id))
+			else
+				self.Library:Notify((ok3 and decoded and decoded.error) or "Upload failed")
+			end
+		end)
+
+		UploadGroup:AddButton("Copy Config Hub URL", function()
+			local fn = setclipboard or toclipboard
+			if fn then
+				fn("https://config-hub--z1bje.replit.app")
+				self.Library:Notify("Copied Config Hub URL to clipboard!")
+			else
+				self.Library:Notify("Your executor does not support clipboard copying.")
+			end
+		end)
+
+		SaveManager:SetIgnoreIndexes({ 'UploadName', 'UploadAuthor', 'UploadDesc', 'UploadLocalDropdown' })
+
+		task.spawn(function()
+			task.wait(0.5)
+			pcall(refreshLocalConfigs)
+		end)
+	end
+
+	-- Optional helper to build both Upload (left) and Config (right) tabs at once
+	function SaveManager:BuildFullConfigTab(window)
+		local ConfigsTab = window:AddTab("Configs")
+		self:BuildUploadSection(ConfigsTab)
+		self:BuildConfigSection(ConfigsTab)
+		return ConfigsTab
 	end
 
 	SaveManager:BuildFolderTree()
@@ -621,7 +815,9 @@ end
 			Tooltip = 'how the text is positioned',
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
+				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
 				Library.NotifyConfig.Alignment = v
+				Library.NotifyCenterConfig.Alignment = v
 				if Library.UpdateNotifAlignment then Library.UpdateNotifAlignment() end
 			end,
 		})
@@ -629,11 +825,16 @@ end
 		Notif:AddDropdown('NotificationBarStyle', {
 			Text = 'Bar Side',
 			Values = { 'Left', 'Right', 'Top', 'Bottom' },
-			Default = 4, -- Bottom
+			Default = 3, -- Top (UE-style default for monoflux)
 			Multi = false,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
+				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
 				Library.NotifyConfig.BarSide = v
+				Library.NotifyCenterConfig.BarSide = v
+				if Library.SetNotifyBarSide then
+					Library:SetNotifyBarSide(v)
+				end
 			end,
 		})
 
@@ -656,6 +857,114 @@ end
 		Notif:AddButton('Send Notification', function()
 			Library:Notify('test notification (' .. tostring(math.random(1000, 9999)) .. ')', 3)
 		end)
+
+
+		-- ========== BACKGROUND (right side) ==========
+		local Bg = tab:AddRightGroupbox('Background')
+		Bg:AddToggle('MenuBackgroundEnabled', {
+			Text = 'Enable Background',
+			Default = true,
+			Callback = function(v)
+				if Library.SetMenuBackgroundEnabled then
+					Library:SetMenuBackgroundEnabled(v)
+				end
+			end,
+		})
+		Bg:AddDropdown('ItemType', {
+			Text = 'Background Item',
+			Values = { 'None', 'Unnamed Enhancements' },
+			Default = 1,
+			Multi = false,
+			Callback = function(v)
+				Library.ItemType = v
+				if Library.SetMenuBackgroundItem then
+					Library:SetMenuBackgroundItem(v)
+				end
+			end,
+		})
+		Bg:AddInput('ItemTypeCustom', {
+			Text = 'Custom item name',
+			Default = '',
+			Placeholder = 'Model name...',
+			Callback = function(v)
+				if v and v ~= '' then
+					Library.ItemType = v
+					if Library.SetMenuBackgroundItem then
+						Library:SetMenuBackgroundItem(v)
+					end
+				end
+			end,
+		})
+		Bg:AddSlider('SwordSpeed', {
+			Text = 'Rotate Speed',
+			Default = 0.15,
+			Min = 0,
+			Max = 2,
+			Rounding = 2,
+			Compact = true,
+			Callback = function(v)
+				if Library.SetSwordSpeed then Library:SetSwordSpeed(v)
+				else Library.SwordSpeed = v end
+			end,
+		})
+		Bg:AddSlider('BackTransparency', {
+			Text = 'Back Transparency',
+			Default = 70,
+			Min = 0,
+			Max = 100,
+			Suffix = '%',
+			Rounding = 0,
+			Compact = true,
+			Callback = function(v)
+				local t = (tonumber(v) or 70) / 100
+				if Library.SetBackTransparency then Library:SetBackTransparency(t)
+				else
+					Library.BackTransparency = t
+					if Library.MenuViewport then
+						Library.MenuViewport.BackgroundTransparency = t
+					end
+				end
+			end,
+		})
+		Bg:AddLabel('Sword Color'):AddColorPicker('SwordColor', {
+			Default = Library.SwordColor or Color3.fromRGB(255, 255, 255),
+			Callback = function(val)
+				Library.SwordColor = val
+				if Library.RefreshMenuBackgroundStyle then
+					Library:RefreshMenuBackgroundStyle()
+				end
+			end,
+		})
+		Bg:AddLabel('Back Color'):AddColorPicker('BackColor', {
+			Default = Library.BackColor or Color3.fromRGB(0, 0, 0),
+			Callback = function(val)
+				Library.BackColor = val
+				if Library.MenuViewport then
+					Library.MenuViewport.BackgroundColor3 = val
+				end
+			end,
+		})
+
+		-- ========== COMMUNITY CONFIGS ==========
+		if self.BuildCommunitySection then
+			pcall(function() self:BuildCommunitySection(tab) end)
+		else
+			local Comm = tab:AddRightGroupbox('community configs')
+			self.CommunityConfigs = self.CommunityConfigs or {}
+			Comm:AddDropdown('CommunityConfigList', {
+				Text = 'config',
+				Values = {},
+				AllowNull = true,
+			})
+			Comm:AddButton('Load community config', function()
+				Library:Notify('No community configs registered yet', 2)
+			end)
+			Comm:AddButton('Refresh list', function()
+				if self._mfRefreshCommunityDropdown then
+					self:_mfRefreshCommunityDropdown()
+				end
+			end)
+		end
 
 		self:SetIgnoreIndexes({ 'MenuKeybind' })
 
