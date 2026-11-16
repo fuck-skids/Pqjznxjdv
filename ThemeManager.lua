@@ -67,16 +67,12 @@ local ThemeManager = {} do
 			end
 		end
 
-		pcall(function()
-			local L = self.Library
-			if not L then return end
-			if type(L.RefreshMenuBackgroundStyle) == "function" then
-				L:RefreshMenuBackgroundStyle()
-			end
-			if type(L.SetMenuBackgroundItem) == "function" and L.ItemType then
-				L:SetMenuBackgroundItem(L.ItemType)
-			end
-		end)
+		if self.Library.RefreshMenuBackgroundStyle then
+			pcall(function() self.Library:RefreshMenuBackgroundStyle() end)
+		end
+		if self.Library.SetMenuBackgroundItem and self.Library.ItemType then
+			pcall(function() self.Library:SetMenuBackgroundItem(self.Library.ItemType) end)
+		end
 
 		self:ThemeUpdate()
 	end
@@ -173,6 +169,10 @@ local ThemeManager = {} do
 		if not self.Library.ItemType then
 			self.Library.ItemType = 'Unnamed Enhancements'
 		end
+		if self.Library.Contrast == nil then self.Library.Contrast = 0 end
+		if self.Library.Saturation == nil then self.Library.Saturation = 0 end
+		if self.Library.Brightness == nil then self.Library.Brightness = 0 end
+		if self.Library.BlurSize == nil then self.Library.BlurSize = 15 end
 
 		-- ========== THEMES ==========
 		themesTab:AddLabel('Main Color'):AddColorPicker('MainColor', {
@@ -277,7 +277,7 @@ local ThemeManager = {} do
 			Options.ThemeManager_CustomThemeList:SetValue(nil)
 		end)
 
-		-- ========== BACKGROUND (UE) ==========
+		-- ========== BACKGROUND (UE exact tabbox) ==========
 		if backgroundTab then
 			backgroundTab:AddLabel('Item Color'):AddColorPicker('SwordColor', {
 				Default = self.Library.SwordColor,
@@ -302,8 +302,7 @@ local ThemeManager = {} do
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
-			})
-			backgroundTab:AddSlider('SwordReflectance', {
+			}):AddSlider('SwordReflectance', {
 				Text = 'Reflectance',
 				Default = 0,
 				Min = 0,
@@ -341,6 +340,32 @@ local ThemeManager = {} do
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
+			}):AddSlider('BlurSize', {
+				Text = 'Blur',
+				Default = 15,
+				Min = 0,
+				Max = 50,
+				Rounding = 0,
+			})
+			backgroundTab:AddSlider('Contrast', {
+				Text = 'Contrast',
+				Default = 0,
+				Min = -10,
+				Max = 10,
+				Rounding = 1,
+			}):AddSlider('Saturation', {
+				Text = 'Saturation',
+				Default = 0,
+				Min = -10,
+				Max = 10,
+				Rounding = 1,
+			})
+			backgroundTab:AddSlider('Brightness', {
+				Text = 'Brightness',
+				Default = 0,
+				Min = -1,
+				Max = 1,
+				Rounding = 1,
 			})
 		end
 
@@ -348,15 +373,18 @@ local ThemeManager = {} do
 
 		local function UpdateTheme()
 			self:ThemeUpdate()
-			-- apply background live
 			local L = self.Library
+			if not L then return end
+
 			if Options.SwordColor then L.SwordColor = Options.SwordColor.Value end
 			if Options.BackColor then L.BackColor = Options.BackColor.Value end
 			if Options.SwordTransparency then L.SwordTransparency = Options.SwordTransparency.Value end
 			if Options.SwordReflectance then L.SwordReflectance = Options.SwordReflectance.Value end
 			if Options.SwordSpeed then
 				L.SwordSpeed = Options.SwordSpeed.Value
-				if type(L.SetSwordSpeed) == 'function' then pcall(function() L:SetSwordSpeed(Options.SwordSpeed.Value) end) end
+				if type(L.SetSwordSpeed) == 'function' then
+					pcall(function() L:SetSwordSpeed(Options.SwordSpeed.Value) end)
+				end
 			end
 			if Options.SwordMaterial then
 				local matName = Options.SwordMaterial.Value
@@ -365,23 +393,48 @@ local ThemeManager = {} do
 			if Options.BackTransparency then
 				local v = Options.BackTransparency.Value
 				L.BackTransparency = v
-				if L.SetBackTransparency then L:SetBackTransparency(v) end
+				if type(L.SetBackTransparency) == 'function' then
+					pcall(function() L:SetBackTransparency(v) end)
+				end
 			end
 			if Options.ItemType then
 				L.ItemType = Options.ItemType.Value
-				if L.SetMenuBackgroundItem then
-					L:SetMenuBackgroundItem(Options.ItemType.Value)
+				if type(L.SetMenuBackgroundItem) == 'function' then
+					pcall(function() L:SetMenuBackgroundItem(Options.ItemType.Value) end)
 				end
 			end
-			if L.RefreshMenuBackgroundStyle then
-				L:RefreshMenuBackgroundStyle()
+			if Options.BlurSize then
+				L.BlurSize = Options.BlurSize.Value
+				if L.BlurEffect then
+					pcall(function()
+						if L.Toggled then
+							L.BlurEffect.Enabled = true
+							L.BlurEffect.Size = L.BlurSize
+						end
+					end)
+				end
+			end
+			if Options.Contrast then L.Contrast = Options.Contrast.Value end
+			if Options.Saturation then L.Saturation = Options.Saturation.Value end
+			if Options.Brightness then L.Brightness = Options.Brightness.Value end
+			if type(L.UpdateColorCorrection) == 'function' then
+				pcall(function() L:UpdateColorCorrection() end)
+			elseif L.ColorCorrection then
+				pcall(function()
+					L.ColorCorrection.Contrast = L.Contrast or 0
+					L.ColorCorrection.Saturation = L.Saturation or 0
+					L.ColorCorrection.Brightness = L.Brightness or 0
+				end)
+			end
+			if type(L.RefreshMenuBackgroundStyle) == 'function' then
+				pcall(function() L:RefreshMenuBackgroundStyle() end)
 			end
 		end
 
 		for _, id in ipairs({
 			'BackgroundColor','MainColor','AccentColor','OutlineColor','FontColor','RiskColor',
 			'SwordColor','ItemType','SwordTransparency','SwordReflectance','SwordSpeed',
-			'SwordMaterial','BackColor','BackTransparency',
+			'SwordMaterial','BackColor','BackTransparency','BlurSize','Contrast','Saturation','Brightness',
 		}) do
 			if Options[id] and Options[id].OnChanged then
 				Options[id]:OnChanged(UpdateTheme)
