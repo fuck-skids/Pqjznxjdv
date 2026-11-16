@@ -1213,6 +1213,11 @@ do
             if Info.NoUI then
                 return;
             end;
+            if Library.KeypickerListVisible == false then
+                if KeybindEntry then KeybindEntry.Visible = false end
+                if Library.KeybindFrame then Library.KeybindFrame.Visible = false end
+                return;
+            end;
             local State = KeyPicker:GetState();
             local displayKey = (KeyPicker.Value == 'None' or KeyPicker.Value == '' or KeyPicker.Value == '--') and '…' or KeyPicker.Value
             ContainerLabel.Text = string.format('[%s] %s (%s)', displayKey, Info.Text, KeyPicker.Mode);
@@ -1245,7 +1250,11 @@ do
                     end
                 end;
             end;
-            Library.KeybindFrame.Size = UDim2.new(0, math.max(XSize + 10 + 15, 210), 0, YSize + 23)
+            local frameH = math.max(YSize + 23, 23)
+            local frameW = math.max(XSize + 10 + 15, 210)
+            Library.KeybindFrame.Size = UDim2.new(0, frameW, 0, frameH)
+            -- show list whenever toggle is on (even if only header)
+            Library.KeybindFrame.Visible = (Library.KeypickerListVisible ~= false)
         end;
         function KeyPicker:GetState()
             if KeyPicker.Mode == 'Always' then
@@ -3112,125 +3121,8 @@ do
         if Library.UpdateNotifCenterArea then Library:UpdateNotifCenterArea() end
     end
     function Library:Notify(Text, Time)
-        local cfg     = Library.NotifyConfig
-        Time = Time or cfg.Duration or 5
-        local barSide = cfg.BarSide   or 'Left'
-        local align   = cfg.Alignment or 'Left'
-        local notifTransparency = Library.GetNotifTransparency(cfg)
-        local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
-        YSize = YSize + 7
-        local BAR_THIN  = 3
-        local BAR_THICK = 3
-        local innerPosX  = (barSide == 'Left')   and 1 or 1
-        local innerPosY  = (barSide == 'Top')    and BAR_THICK or 1
-        local innerSizeW = (barSide == 'Left' or barSide == 'Right') and -2 or -2
-        local innerSizeH = (barSide == 'Top' or barSide == 'Bottom') and -(BAR_THICK + 1) or -2
-        local labelPosX  = (barSide == 'Left')  and BAR_THIN + 2 or 4
-        local labelSizeW = (barSide == 'Left' or barSide == 'Right') and -(BAR_THIN + 4) or -4
-        local outerAnchor = Vector2.new(0, 0)
-        if align == 'Center' then
-            outerAnchor = Vector2.new(0.5, 0)
-        elseif align == 'Right' then
-            outerAnchor = Vector2.new(1, 0)
-        end
-        local childrenCount = #Library.NotificationArea:GetChildren()
-        local layoutOrder = childrenCount + 1
-        if cfg.SortOrder == 'Text Length' then
-            layoutOrder = math.floor(XSize)
-        end
-        local NotifyOuter = Library:Create('Frame', {
-            BackgroundTransparency = 1;
-            AnchorPoint = outerAnchor;
-            BorderColor3 = Color3.new(0, 0, 0);
-            LayoutOrder = layoutOrder;
-            Size = UDim2.new(0, 0, 0, YSize);
-            ClipsDescendants = true;
-            ZIndex = 100;
-            Parent = Library.NotificationArea;
-        });
-        local NotifyInner = Library:Create('Frame', {
-            BackgroundColor3 = Library.MainColor;
-            BackgroundTransparency = notifTransparency;
-            BorderColor3 = Library.OutlineColor;
-            BorderMode = Enum.BorderMode.Inset;
-            Size = UDim2.new(1, 0, 1, 0);
-            ZIndex = 101;
-            Parent = NotifyOuter;
-        });
-        Library:AddToRegistry(NotifyInner, {
-            BackgroundColor3 = 'MainColor';
-            BorderColor3 = 'OutlineColor';
-        }, true);
-        local InnerFrame = Library:Create('Frame', {
-            BackgroundColor3 = Color3.new(1, 1, 1);
-            BorderSizePixel = 0;
-            Position = UDim2.new(0, innerPosX, 0, innerPosY);
-            Size     = UDim2.new(1, innerSizeW, 1, innerSizeH);
-            ZIndex = 102;
-            Parent = NotifyInner;
-        });
-        local Gradient = Library:Create('UIGradient', {
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-                ColorSequenceKeypoint.new(1, Library.MainColor),
-            });
-            Rotation = -90;
-            Parent = InnerFrame;
-        });
-        Library:AddToRegistry(Gradient, {
-            Color = function()
-                return ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-                    ColorSequenceKeypoint.new(1, Library.MainColor),
-                });
-            end
-        });
-        local NotifyLabel = Library:CreateLabel({
-            Position = UDim2.new(0, labelPosX, 0, 0);
-            Size     = UDim2.new(1, labelSizeW, 1, 0);
-            Text     = Text;
-            TextXAlignment = (align == 'Center')
-                and Enum.TextXAlignment.Center
-                or  Enum.TextXAlignment.Left;
-            TextSize = Library.FontSize;
-            ZIndex   = 103;
-            Parent   = InnerFrame;
-        });
-        local AccentBar = Library:Create('Frame', {
-            BackgroundColor3 = Library.AccentColor;
-            BorderSizePixel  = 0;
-            ZIndex           = 104;
-            Parent           = NotifyOuter;
-        });
-        if barSide == 'Left' then
-            AccentBar.Position = UDim2.new(0, -1, 0, -1)
-            AccentBar.Size     = UDim2.new(0, BAR_THIN, 1, 2)
-        elseif barSide == 'Right' then
-            AccentBar.Position = UDim2.new(1, -BAR_THIN + 1, 0, -1)
-            AccentBar.Size     = UDim2.new(0, BAR_THIN, 1, 2)
-        elseif barSide == 'Top' then
-            AccentBar.Position = UDim2.new(0, -1, 0, -1)
-            AccentBar.Size     = UDim2.new(1, 2, 0, BAR_THICK)
-        elseif barSide == 'Bottom' then
-            AccentBar.Position = UDim2.new(0, -1, 1, -BAR_THICK + 1)
-            AccentBar.Size     = UDim2.new(1, 2, 0, BAR_THICK)
-        end
-        Library:AddToRegistry(AccentBar, {
-            BackgroundColor3 = 'AccentColor';
-        }, true);
-        local finalWidth = XSize + 8 + 4
-        if barSide == 'Left' or barSide == 'Right' then
-            finalWidth = finalWidth + BAR_THIN
-        end
-        local tweenIn = TweenService:Create(NotifyOuter, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, finalWidth, 0, YSize)})
-        tweenIn:Play()
-        task.spawn(function()
-            wait(Time or 5);
-            local tweenOut = TweenService:Create(NotifyOuter, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 0, 0, YSize)})
-            tweenOut:Play()
-            tweenOut.Completed:Wait()
-            NotifyOuter:Destroy();
-        end);
+        -- ALL monoflux notifications are centered
+        return Library:NotifyBottomCenter(Text, Time)
     end
 end
 Library.NotificationAreaBottom = Library:Create('Frame', {
@@ -3251,98 +3143,163 @@ Library.NotifLayoutBottom = Library:Create('UIListLayout', {
     Parent = Library.NotificationAreaBottom;
 });
 function Library:NotifyBottomCenter(Text, Time)
-    local cfg = Library.NotifyCenterConfig or {}
-    Time = Time or cfg.Duration or 5
-    local notifTransparency = Library.GetNotifTransparency(cfg)
+    local cfg = Library.NotifyCenterConfig or Library.NotifyConfig or {}
+    -- also pull from main NotifyConfig for shared settings
+    local mainCfg = Library.NotifyConfig or {}
+    Time = Time or cfg.Duration or mainCfg.Duration or 5
+
+    local transparencyPct = tonumber(cfg.Transparency)
+    if transparencyPct == nil then
+        transparencyPct = tonumber(mainCfg.Transparency) or 25
+    end
+    transparencyPct = math.clamp(transparencyPct, 0, 100)
+    -- 0 = fully opaque, 100 = fully invisible
+    local t = transparencyPct / 100
+
     if Library.UpdateNotifCenterArea then
         pcall(function() Library:UpdateNotifCenterArea() end)
     end
+
     local XSize, YSize = Library:GetTextBounds(Text, Library.Font, Library.FontSize)
     YSize = YSize + 7
     local BAR_THICK = 3
     local finalWidth = XSize + 8 + 4
     local maxWidth = 300
     if finalWidth > maxWidth then finalWidth = maxWidth end
+
+    local forceColor = mainCfg.ForceColor or cfg.ForceColor
+    local mainCol = Library.MainColor
+    local accentCol = Library.AccentColor
+    local outlineCol = Library.OutlineColor
+    local fontCol = Library.FontColor
+    if forceColor and Options then
+        if Options.NotificationColorsMain then mainCol = Options.NotificationColorsMain.Value end
+        if Options.NotificationColorsAccent then accentCol = Options.NotificationColorsAccent.Value end
+        if Options.NotificationColorsOutline then outlineCol = Options.NotificationColorsOutline.Value end
+        if Options.NotificationColorsFont then fontCol = Options.NotificationColorsFont.Value end
+    end
+
     local Wrap = Library:Create('Frame', {
         BackgroundTransparency = 1;
         Size = UDim2.new(1, 0, 0, YSize);
         ZIndex = 100;
         Parent = Library.NotificationAreaBottom;
     });
+
     local NotifyOuter = Library:Create('Frame', {
         AnchorPoint = Vector2.new(0.5, 0.5);
         Position = UDim2.new(0.5, 0, 0.5, 0);
         BackgroundColor3 = Color3.new(0, 0, 0);
+        BackgroundTransparency = t; -- full transparency control
         BorderColor3 = Color3.new(0, 0, 0);
+        BorderSizePixel = 0;
         Size = UDim2.new(0, 0, 0, YSize);
         ClipsDescendants = true;
         ZIndex = 100;
         Parent = Wrap;
     });
+
     local NotifyInner = Library:Create('Frame', {
-        BackgroundColor3 = Library.MainColor;
-        BackgroundTransparency = notifTransparency;
-        BorderColor3 = Library.OutlineColor;
+        BackgroundColor3 = mainCol;
+        BackgroundTransparency = t;
+        BorderColor3 = outlineCol;
         BorderMode = Enum.BorderMode.Inset;
         Size = UDim2.new(1, 0, 1, 0);
         ZIndex = 101;
         Parent = NotifyOuter;
     });
-    Library:AddToRegistry(NotifyInner, {
-        BackgroundColor3 = 'MainColor';
-        BorderColor3 = 'OutlineColor';
-    }, true);
+    if not forceColor then
+        Library:AddToRegistry(NotifyInner, {
+            BackgroundColor3 = 'MainColor';
+            BorderColor3 = 'OutlineColor';
+        }, true);
+    end
+
     local InnerFrame = Library:Create('Frame', {
         BackgroundColor3 = Color3.new(1, 1, 1);
+        BackgroundTransparency = t;
         BorderSizePixel = 0;
         Position = UDim2.new(0, 1, 0, BAR_THICK + 1);
         Size = UDim2.new(1, -2, 1, -(BAR_THICK + 2));
         ZIndex = 102;
         Parent = NotifyInner;
     });
+
     local Gradient = Library:Create('UIGradient', {
         Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-            ColorSequenceKeypoint.new(1, Library.MainColor),
+            ColorSequenceKeypoint.new(0, Library:GetDarkerColor(mainCol)),
+            ColorSequenceKeypoint.new(1, mainCol),
         });
         Rotation = -90;
+        -- UIGradient has no BackgroundTransparency; parent frames carry it
         Parent = InnerFrame;
     });
-    Library:AddToRegistry(Gradient, {
-        Color = function()
-            return ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
-                ColorSequenceKeypoint.new(1, Library.MainColor),
-            });
-        end
-    });
-    local NotifyLabel = Library:CreateLabel({
+    if not forceColor then
+        Library:AddToRegistry(Gradient, {
+            Color = function()
+                return ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Library:GetDarkerColor(Library.MainColor)),
+                    ColorSequenceKeypoint.new(1, Library.MainColor),
+                })
+            end;
+        }, true);
+    end
+
+    local NotifyLabel = Library:Create('TextLabel', {
+        BackgroundTransparency = 1;
         Position = UDim2.new(0, 4, 0, 0);
         Size = UDim2.new(1, -8, 1, 0);
+        Font = Library.Font;
         Text = Text;
+        TextColor3 = fontCol;
+        TextTransparency = t; -- text also fades with slider
         TextXAlignment = Enum.TextXAlignment.Center;
         TextSize = Library.FontSize;
+        TextStrokeTransparency = math.clamp(t + 0.3, 0, 1);
         ZIndex = 103;
         Parent = InnerFrame;
     });
+    if not forceColor then
+        Library:AddToRegistry(NotifyLabel, {
+            TextColor3 = 'FontColor';
+        }, true);
+    end
+
+    local barSide = cfg.BarSide or mainCfg.BarSide or 'Top'
     local AccentBar = Library:Create('Frame', {
-        BackgroundColor3 = Library.AccentColor;
+        BackgroundColor3 = accentCol;
+        BackgroundTransparency = t;
         BorderSizePixel = 0;
-        Position = UDim2.new(0, -1, 0, -1);
-        Size = UDim2.new(1, 2, 0, BAR_THICK);
         ZIndex = 104;
         Parent = NotifyOuter;
     });
-    Library:AddToRegistry(AccentBar, {
-        BackgroundColor3 = 'AccentColor';
-    }, true);
+    if barSide == 'Left' then
+        AccentBar.Position = UDim2.new(0, -1, 0, -1)
+        AccentBar.Size = UDim2.new(0, 3, 1, 2)
+    elseif barSide == 'Right' then
+        AccentBar.Position = UDim2.new(1, -2, 0, -1)
+        AccentBar.Size = UDim2.new(0, 3, 1, 2)
+    elseif barSide == 'Bottom' then
+        AccentBar.Position = UDim2.new(0, -1, 1, -BAR_THICK + 1)
+        AccentBar.Size = UDim2.new(1, 2, 0, BAR_THICK)
+    else -- Top
+        AccentBar.Position = UDim2.new(0, -1, 0, -1)
+        AccentBar.Size = UDim2.new(1, 2, 0, BAR_THICK)
+    end
+    if not forceColor then
+        Library:AddToRegistry(AccentBar, {
+            BackgroundColor3 = 'AccentColor';
+        }, true);
+    end
+
     local tweenIn = TweenService:Create(NotifyOuter,
         TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         {Size = UDim2.new(0, finalWidth, 0, YSize)}
     )
     tweenIn:Play()
+
     task.spawn(function()
-        wait(Time or 5)
+        wait(Time)
         local tweenOut = TweenService:Create(NotifyOuter,
             TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
             {Size = UDim2.new(0, 0, 0, YSize)}
@@ -3352,7 +3309,7 @@ function Library:NotifyBottomCenter(Text, Time)
         Wrap:Destroy()
     end)
 end
-do
+
     local WatermarkOuter = Library:Create('Frame', {
         BorderColor3 = Color3.new(0, 0, 0);
         Position = UDim2.new(0, 100, 0, -25);
@@ -3407,12 +3364,14 @@ do
     Library.Watermark = WatermarkOuter;
     Library.WatermarkText = WatermarkLabel;
     Library:MakeDraggable(Library.Watermark);
+    Library.KeypickerListVisible = true
+    Library.KeypickerListMode = Library.KeypickerListMode or Library.KeybindMode or 'Toggled'
     local KeybindOuter = Library:Create('Frame', {
         AnchorPoint = Vector2.new(0, 0.5);
         BorderColor3 = Color3.new(0, 0, 0);
         Position = UDim2.new(0, 10, 0.5, 0);
         Size = UDim2.new(0, 210, 0, 20);
-        Visible = false;
+        Visible = true; -- UE: shown when KeypickerListVisible and has entries
         ZIndex = 100;
         Parent = ScreenGui;
     });
@@ -3508,6 +3467,10 @@ function Library:RefreshKeybinds()
         if not kp.NoUI then
             pcall(function() kp:Update() end)
         end
+    end
+    -- if no keybind entries updated size, still enforce visibility flag
+    if Library.KeypickerListVisible == false and Library.KeybindFrame then
+        Library.KeybindFrame.Visible = false
     end
 end
 function Library:SetWatermarkVisibility(Bool)
