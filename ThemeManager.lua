@@ -24,13 +24,54 @@ local ThemeManager = {} do
 
 		-- custom themes are just regular dictionaries instead of an array with { index, dictionary }
 
-		local scheme = data[2]
-		for idx, col in next, customThemeData or scheme do
-			self.Library[idx] = Color3.fromHex(col)
-			
-			if Options[idx] then
-				Options[idx]:SetValueRGB(Color3.fromHex(col))
+		local scheme = data[2] or data
+		-- support both {idx, scheme} builtin and flat custom dict
+		if data[2] then scheme = data[2] end
+		if customThemeData then scheme = customThemeData end
+
+		local colorKeys = {
+			FontColor = true, MainColor = true, AccentColor = true,
+			BackgroundColor = true, OutlineColor = true, RiskColor = true,
+			SwordColor = true, BackColor = true,
+		}
+		for idx, col in next, scheme do
+			if colorKeys[idx] and type(col) == 'string' then
+				local ok, rgb = pcall(function() return Color3.fromHex(col) end)
+				if ok and rgb then
+					self.Library[idx] = rgb
+					if Options[idx] and Options[idx].SetValueRGB then
+						Options[idx]:SetValueRGB(rgb)
+					end
+				end
+			elseif idx == 'SwordSpeed' or idx == 'BlurSize' or idx == 'BackTransparency'
+				or idx == 'SwordTransparency' or idx == 'SwordReflectance' then
+				local num = tonumber(col)
+				if num then
+					self.Library[idx] = num
+					if Options[idx] and Options[idx].SetValue then
+						-- BackTransparency in themes is 0-1; slider is 0-100
+						if idx == 'BackTransparency' and Options[idx].Max == 100 then
+							Options[idx]:SetValue(num * 100)
+						elseif idx == 'SwordTransparency' and Options[idx].Max == 100 then
+							Options[idx]:SetValue(num * 100)
+						else
+							Options[idx]:SetValue(num)
+						end
+					end
+				end
+			elseif idx == 'ItemType' or idx == 'SwordMaterial' then
+				self.Library[idx] = col
+				if Options[idx] and Options[idx].SetValue then
+					Options[idx]:SetValue(col)
+				end
 			end
+		end
+
+		if self.Library.RefreshMenuBackgroundStyle then
+			pcall(function() self.Library:RefreshMenuBackgroundStyle() end)
+		end
+		if self.Library.SetMenuBackgroundItem and self.Library.ItemType then
+			pcall(function() self.Library:SetMenuBackgroundItem(self.Library.ItemType) end)
 		end
 
 		self:ThemeUpdate()
@@ -38,7 +79,7 @@ local ThemeManager = {} do
 
 	function ThemeManager:ThemeUpdate()
 		-- This allows us to force apply themes without loading the themes tab :)
-		local options = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor" }
+		local options = { "FontColor", "MainColor", "AccentColor", "BackgroundColor", "OutlineColor", "SwordColor", "BackColor" }
 		for i, field in next, options do
 			if Options and Options[field] then
 				self.Library[field] = Options[field].Value
