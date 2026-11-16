@@ -51,6 +51,9 @@ local Library = {
     SwordSpeed = 0.15;           -- rotation speed (UE default)
     BackColor = Color3.fromRGB(0, 0, 0);
     BackTransparency = 0.7;
+    Contrast = 0;
+    Saturation = 0;
+    Brightness = 0;
     NotifyConfig = {
         Alignment = 'Center';
         BarSide   = 'Top';
@@ -90,6 +93,29 @@ Library.BlurEffect.Name = "LinoriaBlur"
 Library.BlurEffect.Size = 0
 Library.BlurEffect.Enabled = false
 pcall(function() Library.BlurEffect.Parent = Lighting end)
+
+Library.ColorCorrection = Instance.new("ColorCorrectionEffect")
+Library.ColorCorrection.Name = "LinoriaColorCorrection"
+Library.ColorCorrection.Contrast = Library.Contrast or 0
+Library.ColorCorrection.Saturation = Library.Saturation or 0
+Library.ColorCorrection.Brightness = Library.Brightness or 0
+Library.ColorCorrection.Enabled = true
+pcall(function()
+    local cam = workspace.CurrentCamera
+    if cam then Library.ColorCorrection.Parent = cam end
+end)
+function Library:UpdateColorCorrection()
+    if not Library.ColorCorrection then return end
+    pcall(function()
+        Library.ColorCorrection.Contrast = Library.Contrast or 0
+        Library.ColorCorrection.Saturation = Library.Saturation or 0
+        Library.ColorCorrection.Brightness = Library.Brightness or 0
+        if not Library.ColorCorrection.Parent then
+            local cam = workspace.CurrentCamera
+            if cam then Library.ColorCorrection.Parent = cam end
+        end
+    end)
+end
 function Library:UpdateBlur()
     if Library.UseBlur then
         if Library.Toggled then
