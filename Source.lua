@@ -3681,7 +3681,7 @@ function Library:CreateWindow(...)
 
     -- ============================================================
     -- Menu 3D background: ViewportFrame + rotating item (UE-style)
-    -- Портировано 1-в-1 из рабочей логики UeActuallyReadablefixed
+    -- Логика вращения и поведения из UeActuallyReadablefixed
     -- ============================================================
     local MenuBgHolder = Library:Create('Frame', {
         BackgroundTransparency = 1;
@@ -3698,7 +3698,7 @@ function Library:CreateWindow(...)
         ZIndex = 0;
         LightColor = Color3.fromRGB(255, 255, 255);
         LightDirection = Vector3.new(-1, -1, -1);
-        Ambient = Color3.fromRGB(180, 180, 180);
+        Ambient = Color3.fromRGB(200, 200, 200);
         Parent = MenuBgHolder;
     });
 
@@ -3715,9 +3715,11 @@ function Library:CreateWindow(...)
     local MenuCam = Instance.new('Camera')
     MenuCam.Parent = MenuViewport
     MenuViewport.CurrentCamera = MenuCam
-    MenuCam.CFrame = CFrame.new(Vector3.new(0, 0, 6), Vector3.new(0, 0, 0))
+    -- Камера чуть дальше и выше, чтобы предмет был виден
+    MenuCam.CFrame = CFrame.new(Vector3.new(0, 1.5, 7), Vector3.new(0, 0, 0))
+    MenuCam.FieldOfView = 50
 
-    -- Defaults exactly like in the working file
+    -- Defaults
     Library.ItemType = Library.ItemType or "Unnamed Enhancements"
     Library.BackColor = Library.BackColor or Color3.new(0, 0, 0)
     Library.BackTransparency = Library.BackTransparency or 0.7
@@ -3727,20 +3729,19 @@ function Library:CreateWindow(...)
     Library.SwordReflectance = Library.SwordReflectance or 0
     Library.SwordSpeed = Library.SwordSpeed or 0.15
     Library.MenuBackgroundEnabled = Library.MenuBackgroundEnabled ~= false
+    Library.BlurSize = Library.BlurSize or 15
+    if Library.UseBlur == nil then Library.UseBlur = false end
 
     local MenuBgState = {
         Enabled = Library.MenuBackgroundEnabled;
         Item = nil;
         ItemName = Library.ItemType;
         Conn = nil;
-        Source = MenuWorld; -- ищем модели здесь
+        Source = MenuWorld;
     }
     Library.MenuBackground = MenuBgState
     Library.MenuViewport = MenuViewport
 
-    ---------------------------------------------------------------
-    -- Built-in models (потому что в обычной библиотеке нет готовых ассетов)
-    ---------------------------------------------------------------
     local function makePart(props)
         local p = Instance.new('Part')
         p.Anchored = true
@@ -3768,25 +3769,25 @@ function Library:CreateWindow(...)
         end
 
         if name == "Sword" or name == "Unnamed Enhancements" then
-            add(makePart({ Size = Vector3.new(0.25, 3.2, 0.08), CFrame = CFrame.new(0, 0.6, 0) }))
-            add(makePart({ Size = Vector3.new(0.2, 0.4, 0.08), CFrame = CFrame.new(0, 2.4, 0) }))
-            add(makePart({ Size = Vector3.new(1.1, 0.18, 0.18), CFrame = CFrame.new(0, -1.05, 0) }))
-            add(makePart({ Size = Vector3.new(0.22, 0.9, 0.22), CFrame = CFrame.new(0, -1.6, 0) }))
-            add(makePart({ Size = Vector3.new(0.32, 0.28, 0.32), CFrame = CFrame.new(0, -2.15, 0), Shape = Enum.PartType.Ball }))
+            -- Более крупный и читаемый меч
+            add(makePart({ Size = Vector3.new(0.35, 4.2, 0.12), CFrame = CFrame.new(0, 0.8, 0) }))          -- blade
+            add(makePart({ Size = Vector3.new(0.28, 0.55, 0.12), CFrame = CFrame.new(0, 3.1, 0) }))         -- tip
+            add(makePart({ Size = Vector3.new(1.5, 0.22, 0.22), CFrame = CFrame.new(0, -1.35, 0) }))        -- guard
+            add(makePart({ Size = Vector3.new(0.28, 1.15, 0.28), CFrame = CFrame.new(0, -2.1, 0) }))        -- handle
+            add(makePart({ Size = Vector3.new(0.42, 0.35, 0.42), CFrame = CFrame.new(0, -2.8, 0), Shape = Enum.PartType.Ball })) -- pommel
         elseif name == "Cross" or name == "Catholic Cross" then
-            add(makePart({ Size = Vector3.new(0.35, 2.8, 0.2), CFrame = CFrame.new(0, 0.2, 0) }))
-            add(makePart({ Size = Vector3.new(1.6, 0.35, 0.2), CFrame = CFrame.new(0, 0.9, 0) }))
+            add(makePart({ Size = Vector3.new(0.4, 3.4, 0.25), CFrame = CFrame.new(0, 0.2, 0) }))
+            add(makePart({ Size = Vector3.new(2.0, 0.4, 0.25), CFrame = CFrame.new(0, 1.0, 0) }))
         elseif name == "Orthodox Cross" then
-            add(makePart({ Size = Vector3.new(0.3, 2.9, 0.18), CFrame = CFrame.new(0, 0.15, 0) }))
-            add(makePart({ Size = Vector3.new(1.5, 0.28, 0.18), CFrame = CFrame.new(0, 0.95, 0) }))
-            add(makePart({ Size = Vector3.new(0.9, 0.22, 0.18), CFrame = CFrame.new(0, -0.7, 0) * CFrame.Angles(0, 0, math.rad(25)) }))
+            add(makePart({ Size = Vector3.new(0.35, 3.5, 0.22), CFrame = CFrame.new(0, 0.15, 0) }))
+            add(makePart({ Size = Vector3.new(1.8, 0.32, 0.22), CFrame = CFrame.new(0, 1.1, 0) }))
+            add(makePart({ Size = Vector3.new(1.1, 0.26, 0.22), CFrame = CFrame.new(0, -0.85, 0) * CFrame.Angles(0, 0, math.rad(25)) }))
         elseif name == "Heart" then
-            add(makePart({ Size = Vector3.new(0.9, 0.9, 0.35), Shape = Enum.PartType.Ball, CFrame = CFrame.new(-0.35, 0.35, 0) }))
-            add(makePart({ Size = Vector3.new(0.9, 0.9, 0.35), Shape = Enum.PartType.Ball, CFrame = CFrame.new(0.35, 0.35, 0) }))
-            add(makePart({ Size = Vector3.new(1.35, 1.1, 0.35), CFrame = CFrame.new(0, -0.35, 0) }))
+            add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(-0.45, 0.45, 0) }))
+            add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(0.45, 0.45, 0) }))
+            add(makePart({ Size = Vector3.new(1.7, 1.4, 0.45), CFrame = CFrame.new(0, -0.4, 0) }))
         else
-            -- fallback
-            add(makePart({ Size = Vector3.new(1.4, 1.4, 1.4), CFrame = CFrame.Angles(math.rad(45), math.rad(45), 0) }))
+            add(makePart({ Size = Vector3.new(1.8, 1.8, 1.8), CFrame = CFrame.Angles(math.rad(45), math.rad(45), 0) }))
         end
 
         local first = model:FindFirstChildWhichIsA("BasePart")
@@ -3835,8 +3836,7 @@ function Library:CreateWindow(...)
     local function setBackgroundItem(nameOrInstance)
         local success = false
         pcall(function()
-            local name = nil
-
+            local name
             if typeof(nameOrInstance) == "Instance" then
                 name = nameOrInstance.Name
             else
@@ -3852,10 +3852,7 @@ function Library:CreateWindow(...)
                 return
             end
 
-            -- Сначала ищем уже существующую модель внутри ViewportFrame/WorldModel
             local found = MenuWorld:FindFirstChild(name, true)
-
-            -- Если нет — создаём встроенную
             if not found then
                 found = buildBuiltinItem(name)
                 if found then
@@ -3867,8 +3864,8 @@ function Library:CreateWindow(...)
                 hideItem(MenuBgState.Item)
 
                 local startCFrame = CFrame.new(0, 0, 0)
-                if name == "Unnamed Enhancements" then
-                    startCFrame = startCFrame * CFrame.Angles(math.rad(-40), 0, 0)
+                if name == "Unnamed Enhancements" or name == "Sword" then
+                    startCFrame = CFrame.Angles(math.rad(-35), math.rad(25), 0)
                 end
 
                 if found:IsA("Model") then
@@ -3932,15 +3929,13 @@ function Library:CreateWindow(...)
         end)
     end
 
-    -- ===== ROTATION LOOP (точно как в рабочем файле) =====
+    -- ROTATION (формула из рабочего файла)
     if MenuBgState.Conn then
         pcall(function() MenuBgState.Conn:Disconnect() end)
     end
 
     MenuBgState.Conn = game:GetService("RunService").RenderStepped:Connect(function(frameDelta)
-        if not MenuBgState.Enabled then
-            return
-        end
+        if not MenuBgState.Enabled then return end
 
         local itemType = Library.ItemType
         if type(itemType) ~= "string" or itemType == "None" then
@@ -3951,10 +3946,8 @@ function Library:CreateWindow(...)
             return
         end
 
-        -- Ищем / переключаем предмет (логика из рабочего файла)
         local foundItem = MenuWorld:FindFirstChild(itemType, true)
         if not foundItem then
-            -- если вдруг пропал — пересоздаём
             pcall(setBackgroundItem, itemType)
             foundItem = MenuBgState.Item
         end
@@ -3963,8 +3956,8 @@ function Library:CreateWindow(...)
             hideItem(MenuBgState.Item)
             if foundItem then
                 local startCFrame = CFrame.new(0, 0, 0)
-                if itemType == "Unnamed Enhancements" then
-                    startCFrame = startCFrame * CFrame.Angles(math.rad(-40), 0, 0)
+                if itemType == "Unnamed Enhancements" or itemType == "Sword" then
+                    startCFrame = CFrame.Angles(math.rad(-35), math.rad(25), 0)
                 end
                 if foundItem:IsA("Model") then
                     pcall(function() foundItem:PivotTo(startCFrame) end)
@@ -3977,11 +3970,8 @@ function Library:CreateWindow(...)
         end
 
         local activeItem = MenuBgState.Item
-        if not activeItem then
-            return
-        end
+        if not activeItem then return end
 
-        -- Точная формула вращения из рабочего файла
         local rotationStep = CFrame.Angles(0, (Library.SwordSpeed or 0.15) / 10 * frameDelta * 60, 0)
         pcall(function()
             if activeItem:IsA("Model") then
@@ -3992,7 +3982,6 @@ function Library:CreateWindow(...)
         end)
     end)
 
-    -- Показываем дефолтный предмет при открытии
     if MenuBgState.Enabled then
         local initial = MenuBgState.ItemName
         if not initial or initial == "" or initial == "None" then
