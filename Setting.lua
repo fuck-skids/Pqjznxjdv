@@ -608,11 +608,18 @@ end
 			Tooltip = 'Shows Keybinds',
 			Callback = function(v)
 				Library.KeypickerListVisible = v and true or false
+				if Library.RefreshKeybinds then
+					pcall(function() Library:RefreshKeybinds() end)
+				end
 				if Library.KeybindFrame then
 					if not v then
 						Library.KeybindFrame.Visible = false
-					elseif Library.RefreshKeybinds then
-						pcall(function() Library:RefreshKeybinds() end)
+					else
+						-- force show; RefreshKeybinds may hide if empty, but at least try
+						Library.KeybindFrame.Visible = true
+						if Library.RefreshKeybinds then
+							pcall(function() Library:RefreshKeybinds() end)
+						end
 					end
 				end
 			end,
@@ -779,9 +786,14 @@ end
 			Compact = true,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
+				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
 				Library.NotifyConfig.Transparency = v
+				Library.NotifyCenterConfig.Transparency = v
 				if Library.SetNotifyTransparency then
 					Library:SetNotifyTransparency(v)
+				end
+				if Library.SetNotifyCenterTransparency then
+					Library:SetNotifyCenterTransparency(v)
 				end
 			end,
 		})
