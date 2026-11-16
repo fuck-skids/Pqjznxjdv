@@ -3439,7 +3439,6 @@ end
     end
     Library._ApplyKeybindTransparency = applyKeybindTransparency
     applyKeybindTransparency(Library.KeybindMenuTransparency or 100)
-end
 
 function Library:SetKeybindMenuTransparency(pct)
     if Library._ApplyKeybindTransparency then
