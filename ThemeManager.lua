@@ -67,12 +67,17 @@ local ThemeManager = {} do
 			end
 		end
 
-		if self.Library.RefreshMenuBackgroundStyle then
-			pcall(function() self.Library:RefreshMenuBackgroundStyle() end)
-		end
-		if self.Library.SetMenuBackgroundItem and self.Library.ItemType then
-			pcall(function() self.Library:SetMenuBackgroundItem(self.Library.ItemType) end)
-		end
+		-- Safe background refresh (never throws)
+		pcall(function()
+			if self.Library and type(self.Library.RefreshMenuBackgroundStyle) == "function" then
+				self.Library:RefreshMenuBackgroundStyle()
+			end
+		end)
+		pcall(function()
+			if self.Library and type(self.Library.SetMenuBackgroundItem) == "function" and self.Library.ItemType then
+				self.Library:SetMenuBackgroundItem(self.Library.ItemType)
+			end
+		end)
 
 		self:ThemeUpdate()
 	end
@@ -352,7 +357,7 @@ local ThemeManager = {} do
 			if Options.SwordReflectance then L.SwordReflectance = Options.SwordReflectance.Value end
 			if Options.SwordSpeed then
 				L.SwordSpeed = Options.SwordSpeed.Value
-				if L.SetSwordSpeed then L:SetSwordSpeed(Options.SwordSpeed.Value) end
+				if type(L.SetSwordSpeed) == 'function' then pcall(function() L:SetSwordSpeed(Options.SwordSpeed.Value) end) end
 			end
 			if Options.SwordMaterial then
 				local matName = Options.SwordMaterial.Value
