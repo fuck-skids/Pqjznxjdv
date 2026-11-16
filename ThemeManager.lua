@@ -117,28 +117,76 @@ local ThemeManager = {} do
 		writefile(self.Folder .. '/themes/default.txt', theme)
 	end
 
-	function ThemeManager:CreateThemeManager(groupbox)
-		-- UE Themes tab controls
+	function ThemeManager:CreateThemeManager(parent)
+		-- UE: Themes + Background as tabs in a left tabbox
+		local tabbox = parent
+		-- parent may already be a groupbox OR a tab; prefer tabbox
+		if parent.AddTab and not parent.AddLabel then
+			tabbox = parent
+		elseif parent.AddLeftTabbox then
+			tabbox = parent:AddLeftTabbox('ThemeBox')
+		elseif self.Library and self._ApplyTab then
+			tabbox = self._ApplyTab:AddLeftTabbox('ThemeBox')
+		else
+			-- groupbox path from ApplyToGroupbox - just use groupbox for themes only
+			tabbox = nil
+		end
+
+		local themesTab
+		local backgroundTab
+		if tabbox and tabbox.AddTab then
+			themesTab = tabbox:AddTab('Themes')
+			backgroundTab = tabbox:AddTab('Background')
+		else
+			themesTab = parent
+			backgroundTab = parent
+		end
+
 		if not self.Library.RiskColor then
 			self.Library.RiskColor = Color3.fromRGB(255, 50, 50)
 		end
+		if not self.Library.SwordColor then
+			self.Library.SwordColor = Color3.new(1,1,1)
+		end
+		if not self.Library.BackColor then
+			self.Library.BackColor = Color3.new(0,0,0)
+		end
+		if self.Library.SwordTransparency == nil then
+			self.Library.SwordTransparency = 0
+		end
+		if self.Library.SwordReflectance == nil then
+			self.Library.SwordReflectance = 0
+		end
+		if not self.Library.SwordMaterial then
+			self.Library.SwordMaterial = Enum.Material.Neon
+		end
+		if not self.Library.SwordSpeed then
+			self.Library.SwordSpeed = 0.15
+		end
+		if self.Library.BackTransparency == nil then
+			self.Library.BackTransparency = 0.7
+		end
+		if not self.Library.ItemType then
+			self.Library.ItemType = 'Unnamed Enhancements'
+		end
 
-		groupbox:AddLabel('Main Color'):AddColorPicker('MainColor', {
+		-- ========== THEMES ==========
+		themesTab:AddLabel('Main Color'):AddColorPicker('MainColor', {
 			Default = self.Library.MainColor,
 		})
-		groupbox:AddLabel('Accent Color'):AddColorPicker('AccentColor', {
+		themesTab:AddLabel('Accent Color'):AddColorPicker('AccentColor', {
 			Default = self.Library.AccentColor,
 		})
-		groupbox:AddLabel('Background Color'):AddColorPicker('BackgroundColor', {
+		themesTab:AddLabel('Background Color'):AddColorPicker('BackgroundColor', {
 			Default = self.Library.BackgroundColor,
 		})
-		groupbox:AddLabel('Outline Color'):AddColorPicker('OutlineColor', {
+		themesTab:AddLabel('Outline Color'):AddColorPicker('OutlineColor', {
 			Default = self.Library.OutlineColor,
 		})
-		groupbox:AddLabel('Text Color'):AddColorPicker('FontColor', {
+		themesTab:AddLabel('Text Color'):AddColorPicker('FontColor', {
 			Default = self.Library.FontColor,
 		})
-		groupbox:AddLabel('Risk Text Color'):AddColorPicker('RiskColor', {
+		themesTab:AddLabel('Risk Text Color'):AddColorPicker('RiskColor', {
 			Default = self.Library.RiskColor,
 		})
 
@@ -150,26 +198,23 @@ local ThemeManager = {} do
 			return self.BuiltInThemes[a][1] < self.BuiltInThemes[b][1]
 		end)
 
-		groupbox:AddDropdown('ThemeManager_ThemeList', {
+		themesTab:AddDropdown('ThemeManager_ThemeList', {
 			Text = 'Theme list',
 			Values = ThemesArray,
 			Default = 1,
 		})
-
-		groupbox:AddButton('Set Default', function()
+		themesTab:AddButton('Set Default', function()
 			self:SaveDefault(Options.ThemeManager_ThemeList.Value)
 			self.Library:Notify(string.format('Set default theme to %q', Options.ThemeManager_ThemeList.Value))
 		end)
-
 		Options.ThemeManager_ThemeList:OnChanged(function()
 			self:ApplyTheme(Options.ThemeManager_ThemeList.Value)
 		end)
 
-		groupbox:AddInput('ThemeManager_CustomThemeName', {
+		themesTab:AddInput('ThemeManager_CustomThemeName', {
 			Text = 'Custom theme name',
 		})
-
-		groupbox:AddButton('Create theme', function()
+		themesTab:AddButton('Create theme', function()
 			local themeName = Options.ThemeManager_CustomThemeName.Value
 			if not themeName or themeName == '' then
 				self.Library:Notify('Failed to create theme: invalid name')
@@ -180,19 +225,16 @@ local ThemeManager = {} do
 			Options.ThemeManager_CustomThemeList:SetValue(nil)
 			self.Library:Notify(string.format('Created theme %q', themeName))
 		end)
-
-		groupbox:AddDropdown('ThemeManager_CustomThemeList', {
+		themesTab:AddDropdown('ThemeManager_CustomThemeList', {
 			Text = 'Custom themes',
 			Values = self:ReloadCustomThemes(),
 			AllowNull = true,
 			Default = 1,
 		})
-
-		groupbox:AddButton('Load theme', function()
+		themesTab:AddButton('Load theme', function()
 			self:ApplyTheme(Options.ThemeManager_CustomThemeList.Value)
 		end)
-
-		groupbox:AddButton('Overwrite Theme', function()
+		themesTab:AddButton('Overwrite Theme', function()
 			local name = Options.ThemeManager_CustomThemeList.Value
 			if not name or name == '' then
 				self.Library:Notify('No custom theme selected')
@@ -215,36 +257,139 @@ local ThemeManager = {} do
 			Options.ThemeManager_CustomThemeList:SetValue(nil)
 			self.Library:Notify(string.format('Deleted theme %q', themeName))
 		end)
-
-		groupbox:AddButton('Refresh list', function()
+		themesTab:AddButton('Set Default', function()
+			local themeName = Options.ThemeManager_CustomThemeList.Value
+			if not themeName or themeName == '' then return end
+			self:SaveDefault(themeName)
+			self.Library:Notify(string.format('Set default theme to %q', themeName))
+		end):AddButton('Reset Default', function()
+			local ok = pcall(function()
+				if delfile then delfile(self.Folder .. '/themes/default.txt') end
+			end)
+			self.Library:Notify(ok and 'Removed default theme' or 'Failed to reset default')
+		end)
+		themesTab:AddButton('Refresh', function()
 			Options.ThemeManager_CustomThemeList:SetValues(self:ReloadCustomThemes())
 			Options.ThemeManager_CustomThemeList:SetValue(nil)
 		end)
 
-		groupbox:AddButton('Set as default', function()
-			if Options.ThemeManager_CustomThemeList.Value ~= nil and Options.ThemeManager_CustomThemeList.Value ~= '' then
-				self:SaveDefault(Options.ThemeManager_CustomThemeList.Value)
-				self.Library:Notify(string.format('Set default theme to %q', Options.ThemeManager_CustomThemeList.Value))
-			end
-		end)
+		-- ========== BACKGROUND (UE) ==========
+		if backgroundTab then
+			backgroundTab:AddLabel('Item Color'):AddColorPicker('SwordColor', {
+				Default = self.Library.SwordColor,
+			})
+			backgroundTab:AddDropdown('ItemType', {
+				Values = {
+					'None',
+					'Sword',
+					'Cross',
+					'Heart',
+					'Catholic Cross',
+					'Orthodox Cross',
+					'Unnamed Enhancements',
+				},
+				Default = 'Unnamed Enhancements',
+				Multi = false,
+				Text = 'Item',
+			})
+			backgroundTab:AddSlider('SwordTransparency', {
+				Text = 'Transparency',
+				Default = 0,
+				Min = 0,
+				Max = 1,
+				Rounding = 2,
+			}):AddSlider('SwordReflectance', {
+				Text = 'Reflectance',
+				Default = 0,
+				Min = 0,
+				Max = 1,
+				Rounding = 2,
+			})
+			backgroundTab:AddSlider('SwordSpeed', {
+				Text = 'Speed',
+				Default = 0.15,
+				Min = 0.1,
+				Max = 1,
+				Rounding = 2,
+			})
+			backgroundTab:AddDropdown('SwordMaterial', {
+				Values = {
+					'ForceField', 'Neon', 'Plastic', 'SmoothPlastic', 'Wood',
+					'WoodPlanks', 'Marble', 'Slate', 'Concrete', 'Granite',
+					'Brick', 'Pebble', 'Cobblestone', 'Rock', 'Sandstone',
+					'Basalt', 'CrackedLava', 'Limestone', 'Pavement',
+					'CorrodedMetal', 'DiamondPlate', 'Foil', 'Metal', 'Grass',
+					'LeafyGrass', 'Sand', 'Fabric', 'Snow', 'Mud', 'Ground',
+					'Asphalt', 'Salt', 'Ice', 'Glacier', 'Glass',
+				},
+				Default = 'Neon',
+				Multi = false,
+				Text = 'Material',
+			})
+			backgroundTab:AddDivider()
+			backgroundTab:AddLabel('Background Color'):AddColorPicker('BackColor', {
+				Default = self.Library.BackColor,
+			})
+			backgroundTab:AddSlider('BackTransparency', {
+				Text = 'Transparency',
+				Default = 0.7,
+				Min = 0,
+				Max = 1,
+				Rounding = 2,
+			})
+		end
 
 		ThemeManager:LoadDefault()
 
 		local function UpdateTheme()
 			self:ThemeUpdate()
+			-- apply background live
+			local L = self.Library
+			if Options.SwordColor then L.SwordColor = Options.SwordColor.Value end
+			if Options.BackColor then L.BackColor = Options.BackColor.Value end
+			if Options.SwordTransparency then L.SwordTransparency = Options.SwordTransparency.Value end
+			if Options.SwordReflectance then L.SwordReflectance = Options.SwordReflectance.Value end
+			if Options.SwordSpeed then
+				L.SwordSpeed = Options.SwordSpeed.Value
+				if L.SetSwordSpeed then L:SetSwordSpeed(Options.SwordSpeed.Value) end
+			end
+			if Options.SwordMaterial then
+				local matName = Options.SwordMaterial.Value
+				pcall(function() L.SwordMaterial = Enum.Material[matName] end)
+			end
+			if Options.BackTransparency then
+				local v = Options.BackTransparency.Value
+				L.BackTransparency = v
+				if L.SetBackTransparency then L:SetBackTransparency(v) end
+			end
+			if Options.ItemType then
+				L.ItemType = Options.ItemType.Value
+				if L.SetMenuBackgroundItem then
+					L:SetMenuBackgroundItem(Options.ItemType.Value)
+				end
+			end
+			if L.RefreshMenuBackgroundStyle then
+				L:RefreshMenuBackgroundStyle()
+			end
 		end
 
-		Options.BackgroundColor:OnChanged(UpdateTheme)
-		Options.MainColor:OnChanged(UpdateTheme)
-		Options.AccentColor:OnChanged(UpdateTheme)
-		Options.OutlineColor:OnChanged(UpdateTheme)
-		Options.FontColor:OnChanged(UpdateTheme)
-		if Options.RiskColor then
-			Options.RiskColor:OnChanged(UpdateTheme)
+		for _, id in ipairs({
+			'BackgroundColor','MainColor','AccentColor','OutlineColor','FontColor','RiskColor',
+			'SwordColor','ItemType','SwordTransparency','SwordReflectance','SwordSpeed',
+			'SwordMaterial','BackColor','BackTransparency',
+		}) do
+			if Options[id] and Options[id].OnChanged then
+				Options[id]:OnChanged(UpdateTheme)
+			end
 		end
+
+		-- initial background apply
+		task.defer(function()
+			pcall(UpdateTheme)
+		end)
 	end
 
-	function ThemeManager:Delete(themeName)
+function ThemeManager:Delete(themeName)
 		if not themeName or themeName == '' then
 			return false, 'invalid name'
 		end
@@ -360,8 +505,10 @@ function ThemeManager:GetCustomTheme(file)
 
 	function ThemeManager:ApplyToTab(tab)
 		assert(self.Library, 'Must set ThemeManager.Library first!')
-		local groupbox = self:CreateGroupBox(tab)
-		self:CreateThemeManager(groupbox)
+		self._ApplyTab = tab
+		-- UE: Themes + Background live in a left tabbox
+		local tabbox = tab:AddLeftTabbox('ThemeBox')
+		self:CreateThemeManager(tabbox)
 	end
 
 	function ThemeManager:ApplyToGroupbox(groupbox)
