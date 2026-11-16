@@ -43,7 +43,7 @@ local Library = {
     KeybindMenuTransparency = 100; -- 0-100, UE-style (100 = fully opaque)
     -- Menu 3D background (ViewportFrame + rotating item)
     MenuBackgroundEnabled = true;
-    ItemType = 'None';           -- model/part name to show, or 'None'
+    ItemType = 'Unnamed Enhancements';
     SwordColor = Color3.fromRGB(255, 255, 255);
     SwordMaterial = Enum.Material.Neon;
     SwordTransparency = 0;
@@ -3713,7 +3713,7 @@ function Library:CreateWindow(...)
     local MenuBgState = {
         Enabled = Library.MenuBackgroundEnabled ~= false;
         Item = nil;
-        ItemName = Library.ItemType or 'None';
+        ItemName = Library.ItemType or 'Unnamed Enhancements';
         Conn = nil;
         Source = nil; -- optional folder to search models in
     }
@@ -3748,19 +3748,72 @@ function Library:CreateWindow(...)
         end
     end
 
+    -- Built-in UE shapes (no external models required)
+    local function makePart(props)
+        local p = Instance.new('Part')
+        p.Anchored = true
+        p.CanCollide = false
+        p.CastShadow = false
+        p.TopSurface = Enum.SurfaceType.Smooth
+        p.BottomSurface = Enum.SurfaceType.Smooth
+        p.Material = Enum.Material.Neon
+        p.Color = Color3.new(1,1,1)
+        for k,v in pairs(props or {}) do p[k] = v end
+        return p
+    end
+
+    local function buildBuiltinItem(name)
+        local model = Instance.new('Model')
+        model.Name = name
+
+        local function add(part)
+            part.Parent = model
+            return part
+        end
+
+        if name == 'Sword' or name == 'Unnamed Enhancements' then
+            -- blade
+            add(makePart({ Size = Vector3.new(0.25, 3.2, 0.08), CFrame = CFrame.new(0, 0.6, 0) }))
+            -- tip
+            add(makePart({ Size = Vector3.new(0.2, 0.4, 0.08), CFrame = CFrame.new(0, 2.4, 0) }))
+            -- guard
+            add(makePart({ Size = Vector3.new(1.1, 0.18, 0.18), CFrame = CFrame.new(0, -1.05, 0) }))
+            -- handle
+            add(makePart({ Size = Vector3.new(0.22, 0.9, 0.22), CFrame = CFrame.new(0, -1.6, 0) }))
+            -- pommel
+            add(makePart({ Size = Vector3.new(0.32, 0.28, 0.32), CFrame = CFrame.new(0, -2.15, 0), Shape = Enum.PartType.Ball }))
+        elseif name == 'Cross' or name == 'Catholic Cross' then
+            add(makePart({ Size = Vector3.new(0.35, 3.2, 0.2), CFrame = CFrame.new(0, 0, 0) }))
+            add(makePart({ Size = Vector3.new(2.0, 0.35, 0.2), CFrame = CFrame.new(0, 0.7, 0) }))
+        elseif name == 'Orthodox Cross' then
+            add(makePart({ Size = Vector3.new(0.3, 3.4, 0.18), CFrame = CFrame.new(0, 0, 0) }))
+            add(makePart({ Size = Vector3.new(1.8, 0.28, 0.18), CFrame = CFrame.new(0, 0.85, 0) }))
+            add(makePart({ Size = Vector3.new(1.1, 0.22, 0.18), CFrame = CFrame.new(0, 1.55, 0) }))
+            add(makePart({ Size = Vector3.new(1.0, 0.2, 0.18), CFrame = CFrame.new(0, -1.15, 0) * CFrame.Angles(0, 0, math.rad(-18)) }))
+        elseif name == 'Heart' then
+            add(makePart({ Size = Vector3.new(1.1, 1.1, 0.35), CFrame = CFrame.new(-0.45, 0.35, 0), Shape = Enum.PartType.Ball }))
+            add(makePart({ Size = Vector3.new(1.1, 1.1, 0.35), CFrame = CFrame.new(0.45, 0.35, 0), Shape = Enum.PartType.Ball }))
+            add(makePart({ Size = Vector3.new(1.6, 1.4, 0.35), CFrame = CFrame.new(0, -0.35, 0) }))
+        else
+            model:Destroy()
+            return nil
+        end
+
+        local pp = model:FindFirstChildWhichIsA('BasePart')
+        if pp then model.PrimaryPart = pp end
+        return model
+    end
+
     local function findSourceItem(name)
         if not name or name == '' or name == 'None' then return nil end
-        -- 1) explicit source folder
         if MenuBgState.Source then
             local f = MenuBgState.Source:FindFirstChild(name, true)
             if f then return f end
         end
-        -- 2) common places
         local places = {
             game:GetService('ReplicatedStorage'),
             game:GetService('ReplicatedStorage'):FindFirstChild('Modules'),
             game:GetService('Lighting'),
-            Library.ScreenGui,
         }
         for _, root in ipairs(places) do
             if root then
@@ -3792,13 +3845,27 @@ function Library:CreateWindow(...)
             styleBackgroundItem(clone)
             MenuBgState.Item = clone
             MenuBgState.ItemName = clone.Name
+            MenuViewport.Visible = true
             return true
         end
         local name = tostring(nameOrInstance or 'None')
         MenuBgState.ItemName = name
         Library.ItemType = name
         if name == 'None' or name == '' then
+            MenuViewport.Visible = MenuBgState.Enabled
             return false
+        end
+        -- Prefer built-in UE shapes so background always works
+        local builtin = buildBuiltinItem(name)
+        if builtin then
+            builtin.Parent = MenuWorld
+            if builtin.PrimaryPart then
+                builtin:PivotTo(CFrame.new(0, 0, 0))
+            end
+            styleBackgroundItem(builtin)
+            MenuBgState.Item = builtin
+            MenuViewport.Visible = true
+            return true
         end
         local src = findSourceItem(name)
         if not src then
@@ -3853,9 +3920,13 @@ function Library:CreateWindow(...)
         end
     end)
 
-    -- try initial item if configured
-    if MenuBgState.Enabled and MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
-        task.defer(function() setBackgroundItem(MenuBgState.ItemName) end)
+    -- UE default: show Unnamed Enhancements on open
+    if MenuBgState.Enabled then
+        local initial = MenuBgState.ItemName
+        if not initial or initial == '' or initial == 'None' then
+            initial = 'Unnamed Enhancements'
+        end
+        task.defer(function() setBackgroundItem(initial) end)
     end
 
     local CornerCircle = Library:Create('Frame', {
