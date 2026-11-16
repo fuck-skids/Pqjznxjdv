@@ -815,7 +815,9 @@ end
 			Tooltip = 'how the text is positioned',
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
+				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
 				Library.NotifyConfig.Alignment = v
+				Library.NotifyCenterConfig.Alignment = v
 				if Library.UpdateNotifAlignment then Library.UpdateNotifAlignment() end
 			end,
 		})
@@ -823,11 +825,16 @@ end
 		Notif:AddDropdown('NotificationBarStyle', {
 			Text = 'Bar Side',
 			Values = { 'Left', 'Right', 'Top', 'Bottom' },
-			Default = 4, -- Bottom
+			Default = 3, -- Top (UE-style default for monoflux)
 			Multi = false,
 			Callback = function(v)
 				Library.NotifyConfig = Library.NotifyConfig or {}
+				Library.NotifyCenterConfig = Library.NotifyCenterConfig or {}
 				Library.NotifyConfig.BarSide = v
+				Library.NotifyCenterConfig.BarSide = v
+				if Library.SetNotifyBarSide then
+					Library:SetNotifyBarSide(v)
+				end
 			end,
 		})
 
@@ -850,6 +857,114 @@ end
 		Notif:AddButton('Send Notification', function()
 			Library:Notify('test notification (' .. tostring(math.random(1000, 9999)) .. ')', 3)
 		end)
+
+
+		-- ========== BACKGROUND (right side) ==========
+		local Bg = tab:AddRightGroupbox('Background')
+		Bg:AddToggle('MenuBackgroundEnabled', {
+			Text = 'Enable Background',
+			Default = true,
+			Callback = function(v)
+				if Library.SetMenuBackgroundEnabled then
+					Library:SetMenuBackgroundEnabled(v)
+				end
+			end,
+		})
+		Bg:AddDropdown('ItemType', {
+			Text = 'Background Item',
+			Values = { 'None', 'Unnamed Enhancements' },
+			Default = 1,
+			Multi = false,
+			Callback = function(v)
+				Library.ItemType = v
+				if Library.SetMenuBackgroundItem then
+					Library:SetMenuBackgroundItem(v)
+				end
+			end,
+		})
+		Bg:AddInput('ItemTypeCustom', {
+			Text = 'Custom item name',
+			Default = '',
+			Placeholder = 'Model name...',
+			Callback = function(v)
+				if v and v ~= '' then
+					Library.ItemType = v
+					if Library.SetMenuBackgroundItem then
+						Library:SetMenuBackgroundItem(v)
+					end
+				end
+			end,
+		})
+		Bg:AddSlider('SwordSpeed', {
+			Text = 'Rotate Speed',
+			Default = 0.15,
+			Min = 0,
+			Max = 2,
+			Rounding = 2,
+			Compact = true,
+			Callback = function(v)
+				if Library.SetSwordSpeed then Library:SetSwordSpeed(v)
+				else Library.SwordSpeed = v end
+			end,
+		})
+		Bg:AddSlider('BackTransparency', {
+			Text = 'Back Transparency',
+			Default = 70,
+			Min = 0,
+			Max = 100,
+			Suffix = '%',
+			Rounding = 0,
+			Compact = true,
+			Callback = function(v)
+				local t = (tonumber(v) or 70) / 100
+				if Library.SetBackTransparency then Library:SetBackTransparency(t)
+				else
+					Library.BackTransparency = t
+					if Library.MenuViewport then
+						Library.MenuViewport.BackgroundTransparency = t
+					end
+				end
+			end,
+		})
+		Bg:AddLabel('Sword Color'):AddColorPicker('SwordColor', {
+			Default = Library.SwordColor or Color3.fromRGB(255, 255, 255),
+			Callback = function(val)
+				Library.SwordColor = val
+				if Library.RefreshMenuBackgroundStyle then
+					Library:RefreshMenuBackgroundStyle()
+				end
+			end,
+		})
+		Bg:AddLabel('Back Color'):AddColorPicker('BackColor', {
+			Default = Library.BackColor or Color3.fromRGB(0, 0, 0),
+			Callback = function(val)
+				Library.BackColor = val
+				if Library.MenuViewport then
+					Library.MenuViewport.BackgroundColor3 = val
+				end
+			end,
+		})
+
+		-- ========== COMMUNITY CONFIGS ==========
+		if self.BuildCommunitySection then
+			pcall(function() self:BuildCommunitySection(tab) end)
+		else
+			local Comm = tab:AddRightGroupbox('community configs')
+			self.CommunityConfigs = self.CommunityConfigs or {}
+			Comm:AddDropdown('CommunityConfigList', {
+				Text = 'config',
+				Values = {},
+				AllowNull = true,
+			})
+			Comm:AddButton('Load community config', function()
+				Library:Notify('No community configs registered yet', 2)
+			end)
+			Comm:AddButton('Refresh list', function()
+				if self._mfRefreshCommunityDropdown then
+					self:_mfRefreshCommunityDropdown()
+				end
+			end)
+		end
 
 		self:SetIgnoreIndexes({ 'MenuKeybind' })
 
