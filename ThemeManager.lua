@@ -302,7 +302,8 @@ local ThemeManager = {} do
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
-			}):AddSlider('SwordReflectance', {
+			})
+			backgroundTab:AddSlider('SwordReflectance', {
 				Text = 'Reflectance',
 				Default = 0,
 				Min = 0,
@@ -340,7 +341,8 @@ local ThemeManager = {} do
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
-			}):AddSlider('BlurSize', {
+			})
+			backgroundTab:AddSlider('BlurSize', {
 				Text = 'Blur',
 				Default = 15,
 				Min = 0,
@@ -353,7 +355,8 @@ local ThemeManager = {} do
 				Min = -10,
 				Max = 10,
 				Rounding = 1,
-			}):AddSlider('Saturation', {
+			})
+			backgroundTab:AddSlider('Saturation', {
 				Text = 'Saturation',
 				Default = 0,
 				Min = -10,
