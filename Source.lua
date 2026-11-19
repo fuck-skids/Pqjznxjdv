@@ -3725,8 +3725,9 @@ function Library:CreateWindow(...)
     Outer.ClipsDescendants = true;
 
     -- ============================================================
-    -- Menu 3D background — models from UE asset rbxassetid://93615626116769
-    -- Exact UE behaviour: same asset, same placement, rotation, styling
+    -- Menu 3D background — EXACT UE approach
+    -- UE keeps rbxassetid://93615626116769 and uses ITS ViewportFrame
+    -- (does NOT create empty VF + clone parts). We do the same.
     -- ============================================================
     local MenuBgHolder = Library:Create('Frame', {
         BackgroundTransparency = 1;
@@ -3738,7 +3739,7 @@ function Library:CreateWindow(...)
 
     Library.ItemType = Library.ItemType or "Unnamed Enhancements"
     Library.BackColor = Library.BackColor or Color3.new(0, 0, 0)
-    Library.BackTransparency = Library.BackTransparency or 0.7
+    Library.BackTransparency = (Library.BackTransparency ~= nil) and Library.BackTransparency or 0.7
     Library.SwordColor = Library.SwordColor or Color3.fromRGB(255, 255, 255)
     Library.SwordMaterial = Library.SwordMaterial or Enum.Material.Neon
     Library.SwordTransparency = Library.SwordTransparency or 0
@@ -3752,175 +3753,261 @@ function Library:CreateWindow(...)
         ItemName = Library.ItemType;
         Conn = nil;
         Viewport = nil;
-        World = nil;
-        SourceRoot = nil;
+        World = nil; -- search root for named items (WorldModel or VF)
         Loaded = false;
     }
     Library.MenuBackground = MenuBgState
 
-    local MenuViewport = Library:Create('ViewportFrame', {
-        BackgroundColor3 = Library.BackColor;
-        BackgroundTransparency = Library.BackTransparency;
-        Size = UDim2.fromScale(1, 1);
-        ZIndex = 0;
-        LightColor = Color3.fromRGB(255, 255, 255);
-        LightDirection = Vector3.new(-1, -1, -1);
-        Ambient = Color3.fromRGB(200, 200, 200);
-        ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1);
-        Parent = MenuBgHolder;
-    })
-    pcall(function()
-        MenuViewport.LightColor = Color3.fromRGB(255, 255, 255)
-        MenuViewport.LightDirection = Vector3.new(-1, -1, -1)
-        MenuViewport.Ambient = Color3.fromRGB(200, 200, 200)
-        MenuViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
-    end)
+    local MenuViewport -- ViewportFrame actually used (from asset)
+    local MenuWorld    -- where named items live (WorldModel or the VF itself)
 
-    local MenuWorld = Instance.new('WorldModel')
-    MenuWorld.Name = 'WorldModel'
-    MenuWorld.Parent = MenuViewport
-
-    local MenuCam = Instance.new('Camera')
-    MenuCam.Parent = MenuViewport
-    MenuViewport.CurrentCamera = MenuCam
-    -- UE: items at CFrame.new(0, 10, 10); camera looks at that area
-    MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
-    MenuCam.FieldOfView = 50
-
-    local function absorbModels(container, targetWorld)
-        if not container or not targetWorld then return end
-        local queue = { container }
-        local seen = {}
-        while #queue > 0 do
-            local node = table.remove(queue, 1)
-            if node and not seen[node] then
-                seen[node] = true
-                if node:IsA('WorldModel') or node:IsA('Folder') or node:IsA('Model') and node ~= container then
-                    -- continue into children; still clone Models below
-                end
-                for _, ch in ipairs(node:GetChildren()) do
-                    if ch:IsA('WorldModel') or ch:IsA('Folder') then
-                        table.insert(queue, ch)
-                    elseif ch:IsA('Model') or ch:IsA('BasePart') then
-                        local okc, cl = pcall(function() return ch:Clone() end)
-                        if okc and cl then
-                            pcall(function()
-                                if cl:IsA('Model') then
-                                    cl:PivotTo(CFrame.new(0, 1000, 0))
-                                else
-                                    cl.CFrame = CFrame.new(0, 1000, 0)
-                                end
-                            end)
-                            cl.Parent = targetWorld
-                        end
-                        -- also walk descendants of this model for nested named items
-                        if ch:IsA('Model') then
-                            table.insert(queue, ch)
-                        end
-                    else
-                        table.insert(queue, ch)
+    -- Load asset ONCE at library level (same as UE localSlot1_105)
+    -- Try several executor APIs — UE uses game:GetObjects
+    local function loadUEAsset()
+        if Library._UEMenuBgAsset then
+            return Library._UEMenuBgAsset
+        end
+        local assetId = "rbxassetid://93615626116769"
+        local root = nil
+        -- 1) game:GetObjects (UE path)
+        pcall(function()
+            local objs = game:GetObjects(assetId)
+            if type(objs) == "table" and objs[1] then
+                root = objs[1]
+            end
+        end)
+        -- 2) global getobjects / GetObjects
+        if not root then
+            pcall(function()
+                local fn = getobjects or GetObjects or (getgenv and (getgenv().getobjects or getgenv().GetObjects))
+                if fn then
+                    local objs = fn(assetId)
+                    if type(objs) == "table" and objs[1] then
+                        root = objs[1]
                     end
+                end
+            end)
+        end
+        -- 3) InsertService:LoadAsset (returns Model container)
+        if not root then
+            pcall(function()
+                local is = game:GetService("InsertService")
+                local model = is:LoadAsset(93615626116769)
+                if model then
+                    root = model:GetChildren()[1] or model
+                end
+            end)
+        end
+        -- 4) game:GetService("InsertService"):LoadLocalAsset if exists
+        if not root then
+            pcall(function()
+                local is = game:GetService("InsertService")
+                if is.LoadLocalAsset then
+                    root = is:LoadLocalAsset(assetId)
+                end
+            end)
+        end
+        if root then
+            Library._UEMenuBgAsset = root
+        end
+        return root
+    end
+    loadUEAsset()
+
+    local function findBestViewport(root)
+        if not root then return nil end
+        -- UE structure: root.ViewportFrame.ViewportFrame (inner has models)
+        local outerVF = root:FindFirstChild("ViewportFrame", true)
+        if not outerVF then
+            for _, d in ipairs(root:GetDescendants()) do
+                if d:IsA("ViewportFrame") then
+                    outerVF = d
+                    break
                 end
             end
         end
+        if not outerVF then return nil end
+        local inner = outerVF:FindFirstChildWhichIsA("ViewportFrame")
+            or outerVF:FindFirstChild("ViewportFrame")
+        if inner and inner:IsA("ViewportFrame") then
+            return inner, outerVF
+        end
+        return outerVF, outerVF
     end
 
-    local function loadBackgroundAsset()
-        local ok, err = pcall(function()
-            local objs = game:GetObjects('rbxassetid://93615626116769')
-            local root = objs and objs[1]
-            if not root then return end
+    local function setupFromAsset()
+        local root = Library._UEMenuBgAsset
+        if not root then
+            root = loadUEAsset()
+        end
+        if not root then
+            return false
+        end
 
-            -- UE structure: root.ViewportFrame.ViewportFrame (inner VF with models)
-            local outerVF = root:FindFirstChild('ViewportFrame', true)
-            local innerVF = outerVF and (outerVF:FindFirstChildWhichIsA('ViewportFrame') or outerVF:FindFirstChild('ViewportFrame'))
-            local srcVF = nil
-            if innerVF and innerVF:IsA('ViewportFrame') then
-                srcVF = innerVF
-            elseif outerVF and outerVF:IsA('ViewportFrame') then
-                srcVF = outerVF
-            end
-            if not srcVF then
-                for _, d in ipairs(root:GetDescendants()) do
-                    if d:IsA('ViewportFrame') then
-                        srcVF = d
-                        break
-                    end
+        local innerVF, outerVF = findBestViewport(root)
+        if not innerVF then
+            return false
+        end
+
+        -- Clone the OUTER viewport frame tree so we keep camera + WorldModel + all items
+        -- Prefer cloning outer if it contains inner; else clone inner
+        local toClone = outerVF or innerVF
+        local cloned
+        local okc, cl = pcall(function() return toClone:Clone() end)
+        if not (okc and cl) then
+            return false
+        end
+        cloned = cl
+
+        -- If we cloned outer and it has nested VF, use nested as the visual host
+        local visual = cloned
+        local nested = cloned:FindFirstChildWhichIsA("ViewportFrame") or cloned:FindFirstChild("ViewportFrame")
+        if nested and nested:IsA("ViewportFrame") then
+            visual = nested
+        end
+
+        -- Parent into menu
+        cloned.Size = UDim2.fromScale(1, 1)
+        cloned.Position = UDim2.new(0, 0, 0, 0)
+        cloned.AnchorPoint = Vector2.new(0, 0)
+        cloned.ZIndex = 0
+        cloned.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
+        cloned.BackgroundTransparency = Library.BackTransparency or 0.7
+        pcall(function()
+            cloned.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
+        end)
+        if visual ~= cloned then
+            visual.Size = UDim2.fromScale(1, 1)
+            visual.Position = UDim2.new(0, 0, 0, 0)
+            visual.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
+            visual.BackgroundTransparency = Library.BackTransparency or 0.7
+            pcall(function()
+                visual.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
+            end)
+        end
+
+        cloned.Parent = MenuBgHolder
+        MenuViewport = visual
+
+        -- Search root for models: WorldModel inside visual, else visual itself, else cloned
+        local wm = visual:FindFirstChildWhichIsA("WorldModel")
+            or visual:FindFirstChild("WorldModel")
+            or cloned:FindFirstChildWhichIsA("WorldModel", true)
+        MenuWorld = wm or visual
+
+        -- Ensure camera exists and points at UE item position
+        local cam = visual:FindFirstChildWhichIsA("Camera")
+        if not cam then
+            cam = Instance.new("Camera")
+            cam.Parent = visual
+        end
+        visual.CurrentCamera = cam
+        -- UE default look
+        cam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
+        if not cam.FieldOfView or cam.FieldOfView < 20 or cam.FieldOfView > 100 then
+            cam.FieldOfView = 50
+        end
+
+        -- Park every Model/BasePart far away initially (UE hide)
+        local function park(obj)
+            pcall(function()
+                if obj:IsA("Model") then
+                    obj:PivotTo(CFrame.new(0, 1000, 0))
+                elseif obj:IsA("BasePart") then
+                    obj.CFrame = CFrame.new(0, 1000, 0)
                 end
+            end)
+        end
+        for _, d in ipairs(MenuWorld:GetDescendants()) do
+            if d:IsA("Model") or d:IsA("BasePart") then
+                -- only park top-level named items later; for now park all roots under MenuWorld
             end
+        end
+        for _, ch in ipairs(MenuWorld:GetChildren()) do
+            if ch:IsA("Model") or ch:IsA("BasePart") then
+                park(ch)
+            end
+        end
+        -- also park nested named candidates found by name list
+        for _, name in ipairs({
+            "Sword", "Cross", "Heart", "Catholic Cross", "Orthodox Cross", "Unnamed Enhancements"
+        }) do
+            local it = MenuWorld:FindFirstChild(name, true)
+            if it then park(it) end
+        end
 
-            -- Prefer cloning models from the deepest useful container
-            local source = srcVF or root
-            -- If the asset VF itself has useful Light/Image props, mirror them
-            if srcVF then
-                pcall(function()
-                    if srcVF.LightColor then MenuViewport.LightColor = srcVF.LightColor end
-                    if srcVF.LightDirection then MenuViewport.LightDirection = srcVF.LightDirection end
-                    if srcVF.Ambient then MenuViewport.Ambient = srcVF.Ambient end
-                end)
-                -- also copy any nested WorldModel camera if present
-                local srcCam = srcVF:FindFirstChildWhichIsA('Camera', true)
-                if srcCam then
+        MenuBgState.Viewport = MenuViewport
+        MenuBgState.World = MenuWorld
+        MenuBgState.Loaded = true
+        Library.MenuViewport = MenuViewport
+        return true
+    end
+
+    -- Fallback: empty VF if asset failed (so UI still works)
+    local function setupFallbackEmpty()
+        MenuViewport = Library:Create('ViewportFrame', {
+            BackgroundColor3 = Library.BackColor;
+            BackgroundTransparency = Library.BackTransparency;
+            Size = UDim2.fromScale(1, 1);
+            ZIndex = 0;
+            LightColor = Color3.fromRGB(255, 255, 255);
+            LightDirection = Vector3.new(-1, -1, -1);
+            Ambient = Color3.fromRGB(200, 200, 200);
+            ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1);
+            Parent = MenuBgHolder;
+        })
+        local wm = Instance.new('WorldModel')
+        wm.Name = 'WorldModel'
+        wm.Parent = MenuViewport
+        MenuWorld = wm
+        local cam = Instance.new('Camera')
+        cam.Parent = MenuViewport
+        MenuViewport.CurrentCamera = cam
+        cam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
+        cam.FieldOfView = 50
+        MenuBgState.Viewport = MenuViewport
+        MenuBgState.World = MenuWorld
+        Library.MenuViewport = MenuViewport
+    end
+
+    if not setupFromAsset() then
+        setupFallbackEmpty()
+        -- one deferred retry (GetObjects sometimes slow)
+        task.defer(function()
+            if MenuBgState.Loaded then return end
+            -- destroy fallback children
+            for _, ch in ipairs(MenuBgHolder:GetChildren()) do
+                ch:Destroy()
+            end
+            if setupFromAsset() then
+                if MenuBgState.ItemName and MenuBgState.ItemName ~= "None" then
                     pcall(function()
-                        MenuCam.FieldOfView = srcCam.FieldOfView
-                        -- keep our look-at; only FOV from source if sensible
-                        if MenuCam.FieldOfView < 20 or MenuCam.FieldOfView > 90 then
-                            MenuCam.FieldOfView = 50
-                        end
+                        Library:SetMenuBackgroundItem(MenuBgState.ItemName)
                     end)
                 end
             end
-
-            absorbModels(source, MenuWorld)
-
-            -- If nothing was absorbed, try cloning every Model under root as fallback
-            if #MenuWorld:GetChildren() == 0 then
-                for _, d in ipairs(root:GetDescendants()) do
-                    if d:IsA('Model') or d:IsA('BasePart') then
-                        local okc, cl = pcall(function() return d:Clone() end)
-                        if okc and cl then
-                            pcall(function()
-                                if cl:IsA('Model') then
-                                    cl:PivotTo(CFrame.new(0, 1000, 0))
-                                else
-                                    cl.CFrame = CFrame.new(0, 1000, 0)
-                                end
-                            end)
-                            cl.Parent = MenuWorld
-                        end
-                    end
-                end
-            end
-
-            MenuBgState.SourceRoot = MenuWorld
-            MenuBgState.Loaded = true
         end)
-        return ok
     end
 
-    loadBackgroundAsset()
-
-    MenuBgState.Viewport = MenuViewport
-    MenuBgState.World = MenuWorld
-    Library.MenuViewport = MenuViewport
-
     pcall(function()
-        Library:AddToRegistry(MenuViewport, {
-            BackgroundColor3 = 'BackColor';
-            BackgroundTransparency = 'BackTransparency';
-            ImageColor3 = 'SwordColor'; -- UE: ViewportFrame tinted by SwordColor
-        })
+        if MenuViewport then
+            Library:AddToRegistry(MenuViewport, {
+                BackgroundColor3 = 'BackColor';
+                BackgroundTransparency = 'BackTransparency';
+                ImageColor3 = 'SwordColor';
+            })
+        end
     end)
 
     local function stylePart(p)
-        if not p or not p:IsA('BasePart') then return end
+        if not p or not p:IsA("BasePart") then return end
         pcall(function()
             p.Color = Library.SwordColor or Color3.new(1, 1, 1)
             local mat = Library.SwordMaterial or Enum.Material.Neon
-            if typeof(mat) == 'string' then
+            if typeof(mat) == "string" then
                 pcall(function() mat = Enum.Material[mat] end)
             end
-            if typeof(mat) == 'EnumItem' then
+            if typeof(mat) == "EnumItem" then
                 p.Material = mat
             end
             p.Transparency = Library.SwordTransparency or 0
@@ -3934,31 +4021,27 @@ function Library:CreateWindow(...)
     local function styleBackgroundItem(obj)
         if not obj then return end
         pcall(function()
-            if obj:IsA('BasePart') then
+            if obj:IsA("BasePart") then
                 stylePart(obj)
             else
                 for _, d in ipairs(obj:GetDescendants()) do
                     stylePart(d)
                 end
-                if obj:IsA('Model') then
-                    for _, d in ipairs(obj:GetChildren()) do
-                        stylePart(d)
-                    end
-                end
             end
         end)
-        -- UE also tints ViewportFrame.ImageColor3 with SwordColor
         pcall(function()
-            MenuViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
+            if MenuViewport then
+                MenuViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
+            end
         end)
     end
 
     local function hideItem(item)
         if not item then return end
         pcall(function()
-            if item:IsA('Model') then
+            if item:IsA("Model") then
                 item:PivotTo(CFrame.new(0, 1000, 0))
-            elseif item:IsA('BasePart') then
+            elseif item:IsA("BasePart") then
                 item.CFrame = CFrame.new(0, 1000, 0)
             end
         end)
@@ -3967,40 +4050,38 @@ function Library:CreateWindow(...)
     local function setBackgroundItem(nameOrInstance)
         local ok = false
         pcall(function()
-            if not MenuBgState.Loaded then
-                loadBackgroundAsset()
-            end
-
+            if not MenuWorld then return end
             local name
-            if typeof(nameOrInstance) == 'Instance' then
+            if typeof(nameOrInstance) == "Instance" then
                 name = nameOrInstance.Name
             else
-                name = tostring(nameOrInstance or 'None')
+                name = tostring(nameOrInstance or "None")
             end
             MenuBgState.ItemName = name
             Library.ItemType = name
 
-            if name == 'None' or name == '' then
+            if name == "None" or name == "" then
                 hideItem(MenuBgState.Item)
                 MenuBgState.Item = nil
                 return
             end
 
-            local searchRoot = MenuWorld
-            -- nested assets: FindFirstChild(..., true)
-            local foundItem = searchRoot:FindFirstChild(name, true)
+            local foundItem = MenuWorld:FindFirstChild(name, true)
+            -- also search Viewport if WorldModel empty of that name
+            if not foundItem and MenuViewport and MenuViewport ~= MenuWorld then
+                foundItem = MenuViewport:FindFirstChild(name, true)
+            end
 
             if foundItem ~= MenuBgState.Item then
                 hideItem(MenuBgState.Item)
-
                 if foundItem then
                     local startCFrame = CFrame.new(0, 10, 10)
-                    if name == 'Unnamed Enhancements' then
+                    if name == "Unnamed Enhancements" then
                         startCFrame = startCFrame * CFrame.Angles(math.rad(-40), 0, 0)
                     end
-                    if foundItem:IsA('Model') then
+                    if foundItem:IsA("Model") then
                         foundItem:PivotTo(startCFrame)
-                    elseif foundItem:IsA('BasePart') then
+                    elseif foundItem:IsA("BasePart") then
                         foundItem.CFrame = startCFrame
                     else
                         foundItem = nil
@@ -4011,7 +4092,7 @@ function Library:CreateWindow(...)
 
             if MenuBgState.Item then
                 styleBackgroundItem(MenuBgState.Item)
-                MenuViewport.Visible = true
+                if MenuViewport then MenuViewport.Visible = true end
                 ok = true
             end
         end)
@@ -4024,7 +4105,7 @@ function Library:CreateWindow(...)
     end
 
     function Library:SetMenuBackgroundSource(folder)
-        if MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
+        if MenuBgState.ItemName and MenuBgState.ItemName ~= "None" then
             pcall(setBackgroundItem, MenuBgState.ItemName)
         end
     end
@@ -4035,7 +4116,7 @@ function Library:CreateWindow(...)
         if not MenuBgState.Enabled then
             hideItem(MenuBgState.Item)
             MenuBgState.Item = nil
-        elseif MenuBgState.ItemName and MenuBgState.ItemName ~= 'None' then
+        elseif MenuBgState.ItemName and MenuBgState.ItemName ~= "None" then
             pcall(setBackgroundItem, MenuBgState.ItemName)
         end
     end
@@ -4048,35 +4129,39 @@ function Library:CreateWindow(...)
         v = math.clamp(tonumber(v) or 0.7, 0, 1)
         Library.BackTransparency = v
         pcall(function()
-            MenuViewport.BackgroundTransparency = v
+            if MenuViewport then
+                MenuViewport.BackgroundTransparency = v
+            end
         end)
     end
 
     function Library:RefreshMenuBackgroundStyle()
         pcall(function()
             styleBackgroundItem(MenuBgState.Item)
-            MenuViewport.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
-            MenuViewport.BackgroundTransparency = Library.BackTransparency or 0.7
-            MenuViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
+            if MenuViewport then
+                MenuViewport.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
+                MenuViewport.BackgroundTransparency = Library.BackTransparency or 0.7
+                MenuViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
+            end
         end)
     end
 
-    -- Exact RenderStepped from UE / Fake Rivals
+    -- Exact RenderStepped from UE
     if MenuBgState.Conn then
         pcall(function() MenuBgState.Conn:Disconnect() end)
     end
-    MenuBgState.Conn = game:GetService('RunService').RenderStepped:Connect(function(frameDelta)
-        if not MenuBgState.Enabled then
+    MenuBgState.Conn = game:GetService("RunService").RenderStepped:Connect(function(frameDelta)
+        if not MenuBgState.Enabled or not MenuWorld then
             return
         end
 
         local itemType = Library.ItemType
-        if type(itemType) ~= 'string' or itemType == 'None' then
+        if type(itemType) ~= "string" or itemType == "None" then
             if MenuBgState.Item then
                 local oldItem = MenuBgState.Item
-                if oldItem:IsA('Model') then
+                if oldItem:IsA("Model") then
                     oldItem:PivotTo(CFrame.new(0, 1000, 0))
-                elseif oldItem:IsA('BasePart') then
+                elseif oldItem:IsA("BasePart") then
                     oldItem.Position = Vector3.new(0, 1000, 0)
                 end
             end
@@ -4085,23 +4170,26 @@ function Library:CreateWindow(...)
         end
 
         local foundItem = MenuWorld:FindFirstChild(itemType, true)
+        if not foundItem and MenuViewport then
+            foundItem = MenuViewport:FindFirstChild(itemType, true)
+        end
         if foundItem ~= MenuBgState.Item then
             if MenuBgState.Item then
                 local oldItem = MenuBgState.Item
-                if oldItem:IsA('Model') then
+                if oldItem:IsA("Model") then
                     oldItem:PivotTo(CFrame.new(0, 1000, 0))
-                elseif oldItem:IsA('BasePart') then
+                elseif oldItem:IsA("BasePart") then
                     oldItem.Position = Vector3.new(0, 1000, 0)
                 end
             end
             if foundItem then
                 local startCFrame = CFrame.new(0, 10, 10)
-                if itemType == 'Unnamed Enhancements' then
+                if itemType == "Unnamed Enhancements" then
                     startCFrame = startCFrame * CFrame.Angles(math.rad(-40), 0, 0)
                 end
-                if foundItem:IsA('Model') then
+                if foundItem:IsA("Model") then
                     foundItem:PivotTo(startCFrame)
-                elseif foundItem:IsA('BasePart') then
+                elseif foundItem:IsA("BasePart") then
                     foundItem.CFrame = startCFrame
                 else
                     foundItem = nil
@@ -4118,25 +4206,20 @@ function Library:CreateWindow(...)
             return
         end
 
-        -- UE exact rotation formula
         local rotationStep = CFrame.Angles(0, (Library.SwordSpeed or 0.15) / 10 * frameDelta * 60, 0)
-        if activeItem:IsA('Model') then
+        if activeItem:IsA("Model") then
             activeItem:PivotTo(activeItem:GetPivot() * rotationStep)
-        elseif activeItem:IsA('BasePart') then
+        elseif activeItem:IsA("BasePart") then
             activeItem.CFrame = activeItem.CFrame * rotationStep
         end
     end)
 
     if MenuBgState.Enabled then
         local initial = MenuBgState.ItemName
-        if not initial or initial == '' or initial == 'None' then
-            initial = 'Unnamed Enhancements'
+        if not initial or initial == "" or initial == "None" then
+            initial = "Unnamed Enhancements"
         end
         task.defer(function()
-            -- retry load once if models missing (slow GetObjects)
-            if not MenuBgState.Loaded or #MenuWorld:GetChildren() == 0 then
-                loadBackgroundAsset()
-            end
             pcall(setBackgroundItem, initial)
         end)
     end
