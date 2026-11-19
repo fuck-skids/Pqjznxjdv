@@ -3810,7 +3810,9 @@ function Library:CreateWindow(...)
                 table.insert(kids, ch)
             end
             for _, ch in ipairs(kids) do
-                if ch:IsA("WorldModel") then
+                if ch:IsA("WorldModel") or ch:IsA("Folder") then
+                    -- The original UE asset keeps some selectable items
+                    -- inside folders. Walk those folders as well as WorldModels.
                     absorb(ch)
                 elseif ch:IsA("Model") or ch:IsA("BasePart") then
                     local okc, cl = pcall(function() return ch:Clone() end)
