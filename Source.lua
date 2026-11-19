@@ -3780,66 +3780,60 @@ function Library:CreateWindow(...)
     MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
     MenuCam.FieldOfView = 50
 
-    -- Load UE asset and pull named items into our WorldModel
+    -- Use the original UE asset hierarchy directly. The working UE script
+    -- searches and animates models inside root.ViewportFrame.ViewportFrame;
+    -- cloning those descendants into a new WorldModel can break their layout
+    -- and viewport-specific setup.
+    local MenuBgFrame = MenuBgHolder
     pcall(function()
         local objs = game:GetObjects("rbxassetid://93615626116769")
         local root = objs and objs[1]
         if not root then return end
 
-        -- UE structure: root.ViewportFrame.ViewportFrame (inner VF with models)
-        local outerVF = root:FindFirstChild("ViewportFrame", true)
-        local innerVF = outerVF and (outerVF:FindFirstChildWhichIsA("ViewportFrame") or outerVF:FindFirstChild("ViewportFrame"))
-        local srcVF = nil
-        if innerVF and innerVF:IsA("ViewportFrame") then
-            srcVF = innerVF
-        elseif outerVF and outerVF:IsA("ViewportFrame") then
-            srcVF = outerVF
+        local outerFrame = root:FindFirstChild("ViewportFrame")
+        local innerViewport = outerFrame and outerFrame:FindFirstChild("ViewportFrame")
+        if not (outerFrame and innerViewport and innerViewport:IsA("ViewportFrame")) then
+            outerFrame = root:FindFirstChild("ViewportFrame", true)
+            innerViewport = outerFrame and outerFrame:FindFirstChild("ViewportFrame", true)
         end
-        if not srcVF then
-            -- search any ViewportFrame
-            for _, d in ipairs(root:GetDescendants()) do
-                if d:IsA("ViewportFrame") then srcVF = d; break end
-            end
+        if not (outerFrame and innerViewport and innerViewport:IsA("ViewportFrame")) then
+            return
         end
-        if not srcVF then return end
 
-        -- Copy every Model / BasePart from asset VF (and nested WorldModel) into ours
-        local function absorb(container)
-            local kids = {}
-            for _, ch in ipairs(container:GetChildren()) do
-                table.insert(kids, ch)
-            end
-            for _, ch in ipairs(kids) do
-                if ch:IsA("WorldModel") or ch:IsA("Folder") then
-                    -- The original UE asset keeps some selectable items
-                    -- inside folders. Walk those folders as well as WorldModels.
-                    absorb(ch)
-                elseif ch:IsA("Model") or ch:IsA("BasePart") then
-                    local okc, cl = pcall(function() return ch:Clone() end)
-                    if okc and cl then
-                        -- park far away initially (UE hide)
-                        pcall(function()
-                            if cl:IsA("Model") then
-                                cl:PivotTo(CFrame.new(0, 1000, 0))
-                            else
-                                cl.CFrame = CFrame.new(0, 1000, 0)
-                            end
-                        end)
-                        cl.Parent = MenuWorld
-                    end
-                end
-            end
-        end
-        absorb(srcVF)
-        MenuBgState.SourceRoot = MenuWorld
+        -- Detach the asset's original container before destroying its ScreenGui.
+        outerFrame.Parent = MenuBgHolder
+        outerFrame.Position = UDim2.fromScale(0, 0)
+        outerFrame.Size = UDim2.fromScale(1, 1)
+        outerFrame.AnchorPoint = Vector2.new(0, 0)
+        outerFrame.Visible = true
+        outerFrame.ZIndex = 0
+        outerFrame.ClipsDescendants = true
+        outerFrame.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
+        outerFrame.BackgroundTransparency = Library.BackTransparency or 0.7
+
+        innerViewport.Position = UDim2.fromScale(0, 0)
+        innerViewport.Size = UDim2.fromScale(1, 1)
+        innerViewport.Visible = true
+        innerViewport.ZIndex = 0
+        pcall(function() innerViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1) end)
+
+        -- The original working script uses this exact inner ViewportFrame
+        -- as the search root; do not clone or flatten its contents.
+        MenuViewport:Destroy()
+        MenuViewport = innerViewport
+        MenuWorld = innerViewport
+        MenuBgFrame = outerFrame
+        pcall(function() root:Destroy() end)
+        MenuBgState.SourceRoot = innerViewport
     end)
 
     MenuBgState.Viewport = MenuViewport
+    MenuBgState.Frame = MenuBgFrame
     MenuBgState.World = MenuWorld
     Library.MenuViewport = MenuViewport
 
     pcall(function()
-        Library:AddToRegistry(MenuViewport, {
+        Library:AddToRegistry(MenuBgFrame, {
             BackgroundColor3 = 'BackColor';
             BackgroundTransparency = 'BackTransparency';
         })
@@ -3973,15 +3967,15 @@ function Library:CreateWindow(...)
         v = math.clamp(tonumber(v) or 0.7, 0, 1)
         Library.BackTransparency = v
         pcall(function()
-            MenuViewport.BackgroundTransparency = v
+            MenuBgFrame.BackgroundTransparency = v
         end)
     end
 
     function Library:RefreshMenuBackgroundStyle()
         pcall(function()
             styleBackgroundItem(MenuBgState.Item)
-            MenuViewport.BackgroundColor3 = Library.BackColor or Color3.new(0,0,0)
-            MenuViewport.BackgroundTransparency = Library.BackTransparency or 0.7
+            MenuBgFrame.BackgroundColor3 = Library.BackColor or Color3.new(0,0,0)
+            MenuBgFrame.BackgroundTransparency = Library.BackTransparency or 0.7
         end)
     end
 
