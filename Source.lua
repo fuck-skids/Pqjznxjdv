@@ -3804,6 +3804,28 @@ function Library:CreateWindow(...)
         if not srcVF then return end
 
         -- Copy every Model / BasePart from asset VF (and nested WorldModel) into ours
+        -- Also register each BasePart in the Library registry so theme updates
+        -- (SwordColor, SwordTransparency, SwordReflectance, SwordMaterial) apply live.
+        local partRegistryProps = {
+            Color       = 'SwordColor';
+            Transparency = 'SwordTransparency';
+            Reflectance  = 'SwordReflectance';
+            Material     = 'SwordMaterial';
+        }
+        local function registerParts(obj)
+            if not obj then return end
+            pcall(function()
+                if obj:IsA("BasePart") then
+                    Library:AddToRegistry(obj, partRegistryProps)
+                else
+                    for _, d in ipairs(obj:GetDescendants()) do
+                        if d:IsA("BasePart") then
+                            Library:AddToRegistry(d, partRegistryProps)
+                        end
+                    end
+                end
+            end)
+        end
         local function absorb(container)
             local kids = {}
             for _, ch in ipairs(container:GetChildren()) do
@@ -3824,6 +3846,8 @@ function Library:CreateWindow(...)
                             end
                         end)
                         cl.Parent = MenuWorld
+                        -- register parts in the theme registry for live updates
+                        registerParts(cl)
                     end
                 end
             end
@@ -3840,6 +3864,7 @@ function Library:CreateWindow(...)
         Library:AddToRegistry(MenuViewport, {
             BackgroundColor3 = 'BackColor';
             BackgroundTransparency = 'BackTransparency';
+            ImageColor3 = 'SwordColor';
         })
     end)
 
