@@ -3887,17 +3887,60 @@ function Library:CreateWindow(...)
             end
 
             local searchRoot = MenuWorld or MenuViewport
-            local foundItem = searchRoot:FindFirstChild(name, true)
+            local foundItem = searchRoot and searchRoot:FindFirstChild(name, true)
+
+            -- Fallback: build builtin model if asset has no named item
+            if not foundItem and searchRoot then
+                local function makePart(props)
+                    local p = Instance.new('Part')
+                    p.Anchored = true
+                    p.CanCollide = false
+                    p.CastShadow = false
+                    p.Material = Enum.Material.Neon
+                    p.Color = Color3.new(1,1,1)
+                    if type(props) == 'table' then
+                        for k,v in pairs(props) do pcall(function() p[k]=v end) end
+                    end
+                    return p
+                end
+                local model = Instance.new('Model')
+                model.Name = name
+                local function add(part) part.Parent = model; return part end
+                if name == 'Sword' or name == 'Unnamed Enhancements' then
+                    add(makePart({ Size = Vector3.new(0.35, 4.2, 0.12), CFrame = CFrame.new(0, 0.8, 0) }))
+                    add(makePart({ Size = Vector3.new(0.28, 0.55, 0.12), CFrame = CFrame.new(0, 3.1, 0) }))
+                    add(makePart({ Size = Vector3.new(1.5, 0.22, 0.22), CFrame = CFrame.new(0, -1.35, 0) }))
+                    add(makePart({ Size = Vector3.new(0.28, 1.15, 0.28), CFrame = CFrame.new(0, -2.1, 0) }))
+                    add(makePart({ Size = Vector3.new(0.42, 0.35, 0.42), CFrame = CFrame.new(0, -2.8, 0), Shape = Enum.PartType.Ball }))
+                elseif name == 'Cross' or name == 'Catholic Cross' then
+                    add(makePart({ Size = Vector3.new(0.4, 3.4, 0.25), CFrame = CFrame.new(0, 0.2, 0) }))
+                    add(makePart({ Size = Vector3.new(2.0, 0.4, 0.25), CFrame = CFrame.new(0, 1.0, 0) }))
+                elseif name == 'Orthodox Cross' then
+                    add(makePart({ Size = Vector3.new(0.35, 3.5, 0.22), CFrame = CFrame.new(0, 0.15, 0) }))
+                    add(makePart({ Size = Vector3.new(1.8, 0.32, 0.22), CFrame = CFrame.new(0, 1.1, 0) }))
+                    add(makePart({ Size = Vector3.new(1.1, 0.26, 0.22), CFrame = CFrame.new(0, -0.85, 0) * CFrame.Angles(0, 0, math.rad(25)) }))
+                elseif name == 'Heart' then
+                    add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(-0.45, 0.45, 0) }))
+                    add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(0.45, 0.45, 0) }))
+                    add(makePart({ Size = Vector3.new(1.7, 1.4, 0.45), CFrame = CFrame.new(0, -0.4, 0) }))
+                else
+                    add(makePart({ Size = Vector3.new(1.8, 1.8, 1.8), CFrame = CFrame.Angles(math.rad(45), math.rad(45), 0) }))
+                end
+                local first = model:FindFirstChildWhichIsA('BasePart')
+                if first then model.PrimaryPart = first end
+                model.Parent = searchRoot
+                foundItem = model
+            end
 
             if foundItem ~= MenuBgState.Item then
                 hideItem(MenuBgState.Item)
                 if foundItem then
-                    local startCFrame = CFrame.new(0, 10, 10)
-                    if name == "Unnamed Enhancements" then
-                        startCFrame = startCFrame * CFrame.Angles(math.rad(-40), 0, 0)
+                    local startCFrame = CFrame.new(0, 0, 0)
+                    if name == "Unnamed Enhancements" or name == "Sword" then
+                        startCFrame = CFrame.Angles(math.rad(-35), math.rad(25), 0)
                     end
                     if foundItem:IsA("Model") then
-                        foundItem:PivotTo(startCFrame)
+                        pcall(function() foundItem:PivotTo(startCFrame) end)
                     elseif foundItem:IsA("BasePart") then
                         foundItem.CFrame = startCFrame
                     else
@@ -3976,7 +4019,12 @@ function Library:CreateWindow(...)
         end
 
         local searchRoot = MenuWorld or MenuViewport
-        local foundItem = searchRoot:FindFirstChild(itemType, true)
+        local foundItem = searchRoot and searchRoot:FindFirstChild(itemType, true)
+        if not foundItem and not MenuBgState.Item then
+            -- create once via setBackgroundItem (builtin fallback)
+            pcall(setBackgroundItem, itemType)
+            foundItem = MenuBgState.Item
+        end
         if foundItem ~= MenuBgState.Item then
             if MenuBgState.Item then
                 local oldItem = MenuBgState.Item
@@ -4541,17 +4589,38 @@ function Library:CreateWindow(...)
                 Library.CursorLoopRunning = false
             end)
         end
-        if Library.UseBlur then
+        if Library.UseBlur or (Library.BlurSize and Library.BlurSize > 0) then
             if Library.Toggled then
-                Library.BlurEffect.Enabled = true
-                Library.BlurEffect.Size = Library.BlurSize
+                if Library.BlurEffect then
+                    Library.BlurEffect.Enabled = true
+                    Library.BlurEffect.Size = Library.BlurSize or 15
+                end
             else
+                if Library.BlurEffect then
+                    Library.BlurEffect.Size = 0
+                    Library.BlurEffect.Enabled = false
+                end
+            end
+        else
+            if Library.BlurEffect then
                 Library.BlurEffect.Size = 0
                 Library.BlurEffect.Enabled = false
             end
-        else
-            Library.BlurEffect.Size = 0
-            Library.BlurEffect.Enabled = false
+        end
+
+        -- Apply background/item/color correction when menu opens
+        if Library.Toggled then
+            pcall(function()
+                if type(Library.UpdateColorCorrection) == 'function' then
+                    Library:UpdateColorCorrection()
+                end
+                if type(Library.RefreshMenuBackgroundStyle) == 'function' then
+                    Library:RefreshMenuBackgroundStyle()
+                end
+                if type(Library.SetMenuBackgroundItem) == 'function' and Library.ItemType then
+                    Library:SetMenuBackgroundItem(Library.ItemType)
+                end
+            end)
         end
     end
     Library:GiveSignal(InputService.InputBegan:Connect(function(Input, Processed)
