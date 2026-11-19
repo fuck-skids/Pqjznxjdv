@@ -296,14 +296,13 @@ local ThemeManager = {} do
 				Multi = false,
 				Text = 'Item',
 			})
-			backgroundTab:AddSlider('SwordTransparency', {
+			backgroundTab:AddDoubleSlider('SwordTransparency', {
 				Text = 'Transparency',
 				Default = 0,
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
-			})
-			backgroundTab:AddSlider('SwordReflectance', {
+			}, 'SwordReflectance', {
 				Text = 'Reflectance',
 				Default = 0,
 				Min = 0,
@@ -335,28 +334,26 @@ local ThemeManager = {} do
 			backgroundTab:AddLabel('Background Color'):AddColorPicker('BackColor', {
 				Default = self.Library.BackColor,
 			})
-			backgroundTab:AddSlider('BackTransparency', {
+			backgroundTab:AddDoubleSlider('BackTransparency', {
 				Text = 'Transparency',
 				Default = 0.7,
 				Min = 0,
 				Max = 1,
 				Rounding = 2,
-			})
-			backgroundTab:AddSlider('BlurSize', {
+			}, 'BlurSize', {
 				Text = 'Blur',
 				Default = 15,
 				Min = 0,
 				Max = 50,
 				Rounding = 0,
 			})
-			backgroundTab:AddSlider('Contrast', {
+			backgroundTab:AddDoubleSlider('Contrast', {
 				Text = 'Contrast',
 				Default = 0,
 				Min = -10,
 				Max = 10,
 				Rounding = 1,
-			})
-			backgroundTab:AddSlider('Saturation', {
+			}, 'Saturation', {
 				Text = 'Saturation',
 				Default = 0,
 				Min = -10,
