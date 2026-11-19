@@ -3781,66 +3781,86 @@ function Library:CreateWindow(...)
     MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
     MenuCam.FieldOfView = 50
 
-    -- Use the original UE asset hierarchy directly. The working UE script
-    -- searches and animates models inside root.ViewportFrame.ViewportFrame;
-    -- cloning those descendants into a new WorldModel can break their layout
-    -- and viewport-specific setup.
+    -- Keep the original UE asset intact and display a full clone of its
+    -- ViewportFrame hierarchy. The working UE script searches exactly
+    -- root.ViewportFrame.ViewportFrame; do not flatten or selectively copy
+    -- its item Models/BaseParts.
     local MenuBgFrame = MenuBgHolder
-    pcall(function()
+    local assetLoadOk, assetLoadError = pcall(function()
         local objs = game:GetObjects("rbxassetid://93615626116769")
-        local root = objs and objs[1]
-        if not root then return end
-
-        local outerFrame = root:FindFirstChild("ViewportFrame")
-        local innerViewport = outerFrame and outerFrame:FindFirstChild("ViewportFrame")
-        if not (outerFrame and innerViewport and innerViewport:IsA("ViewportFrame")) then
-            outerFrame = root:FindFirstChild("ViewportFrame", true)
-            innerViewport = outerFrame and outerFrame:FindFirstChild("ViewportFrame", true)
-        end
-        if not (outerFrame and innerViewport and innerViewport:IsA("ViewportFrame")) then
-            return
+        local sourceAsset = objs and objs[1]
+        if not sourceAsset then
+            error("UE background asset returned no root instance")
         end
 
-        -- Detach the asset's original container before destroying its ScreenGui.
-        outerFrame.Parent = MenuBgHolder
-        outerFrame.Position = UDim2.fromScale(0, 0)
-        outerFrame.Size = UDim2.fromScale(1, 1)
-        outerFrame.AnchorPoint = Vector2.new(0, 0)
-        outerFrame.Visible = true
-        outerFrame.ZIndex = 0
-        outerFrame.ClipsDescendants = true
-        outerFrame.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
-        outerFrame.BackgroundTransparency = Library.BackTransparency or 0.7
+        -- Match the working file's direct hierarchy first.
+        local sourceOuter = sourceAsset:FindFirstChild("ViewportFrame")
+        local sourceInner = sourceOuter and sourceOuter:FindFirstChild("ViewportFrame")
+        if not sourceOuter or not sourceInner or not sourceInner:IsA("ViewportFrame") then
+            error("UE background asset is missing root.ViewportFrame.ViewportFrame")
+        end
 
-        innerViewport.Position = UDim2.fromScale(0, 0)
-        innerViewport.Size = UDim2.fromScale(1, 1)
-        innerViewport.Visible = true
-        innerViewport.ZIndex = 0
-        pcall(function() innerViewport.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1) end)
+        -- Make sure Roblox includes every descendant when cloning the asset.
+        -- Some uploaded assets mark nested instances as non-Archivable.
+        sourceOuter.Archivable = true
+        for _, descendant in ipairs(sourceOuter:GetDescendants()) do
+            descendant.Archivable = true
+        end
 
-        -- The original working script uses this exact inner ViewportFrame
-        -- as the search root; do not clone or flatten its contents.
+        -- Clone the complete outer frame so all item models, folders,
+        -- viewport settings and descendants remain together.
+        local visibleOuter = sourceOuter:Clone()
+        if not visibleOuter then
+            error("UE background outer frame could not be cloned")
+        end
+        visibleOuter.Name = "UEBackgroundViewport"
+        visibleOuter.Parent = MenuBgHolder
+        visibleOuter.Position = UDim2.fromScale(0, 0)
+        visibleOuter.Size = UDim2.fromScale(1, 1)
+        visibleOuter.AnchorPoint = Vector2.new(0, 0)
+        visibleOuter.Visible = true
+        visibleOuter.ZIndex = 0
+        visibleOuter.ClipsDescendants = true
+
+        local visibleInner = visibleOuter:FindFirstChild("ViewportFrame")
+        if not (visibleInner and visibleInner:IsA("ViewportFrame")) then
+            error("Cloned UE background is missing its inner ViewportFrame")
+        end
+        visibleInner.Position = UDim2.fromScale(0, 0)
+        visibleInner.Size = UDim2.fromScale(1, 1)
+        visibleInner.Visible = true
+        visibleInner.ZIndex = 0
+
+        -- ViewportFrame.CurrentCamera is a reference and may not be a child
+        -- of the cloned frame. Clone and attach it explicitly when needed.
+        local sourceCamera = sourceInner.CurrentCamera
+        if not sourceCamera then
+            sourceCamera = sourceAsset:FindFirstChildWhichIsA("Camera", true)
+        end
+        if sourceCamera then
+            local clonedCamera = sourceCamera:Clone()
+            clonedCamera.Parent = visibleInner
+            visibleInner.CurrentCamera = clonedCamera
+        end
+
         MenuViewport:Destroy()
-        MenuViewport = innerViewport
-        MenuWorld = innerViewport
-        MenuBgFrame = outerFrame
-        -- Keep the original asset root alive. Its ViewportFrame may use a
-        -- Camera or other supporting instances stored outside outerFrame.
-        -- Destroying root here can silently invalidate CurrentCamera and
-        -- leave every selected model invisible.
-        MenuBgState.SourceAsset = root
-        MenuBgState.SourceRoot = innerViewport
+        MenuViewport = visibleInner
+        MenuWorld = visibleInner
+        MenuBgFrame = visibleOuter
+        MenuBgState.SourceAsset = sourceAsset
+        MenuBgState.SourceRoot = visibleInner
 
-        -- Preserve the asset camera if it is stored outside the moved frame.
         pcall(function()
-            if not innerViewport.CurrentCamera then
-                local camera = root:FindFirstChildWhichIsA("Camera", true)
-                if camera then
-                    innerViewport.CurrentCamera = camera
-                end
-            end
+            visibleOuter.BackgroundColor3 = Library.BackColor or Color3.new(0, 0, 0)
+            visibleOuter.BackgroundTransparency = Library.BackTransparency or 0.7
+            visibleInner.ImageColor3 = Library.SwordColor or Color3.new(1, 1, 1)
         end)
     end)
+    MenuBgState.AssetLoaded = assetLoadOk
+    if not assetLoadOk then
+        MenuBgState.LoadError = tostring(assetLoadError)
+        warn("[Library Background] " .. tostring(assetLoadError))
+    end
 
     MenuBgState.Viewport = MenuViewport
     MenuBgState.Frame = MenuBgFrame
@@ -4017,8 +4037,7 @@ function Library:CreateWindow(...)
             return
         end
 
-        -- Some background assets are nested under folders, so a
-        -- direct-child lookup can silently fail.
+        -- Same recursive lookup used by UeButBetter.
         local foundItem = MenuWorld:FindFirstChild(itemType, true)
         if foundItem ~= MenuBgState.Item then
             if MenuBgState.Item then
