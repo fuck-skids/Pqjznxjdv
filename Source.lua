@@ -38,7 +38,7 @@ local Library = {
     WireframeDrag = true;
     UseBlur = false;
     BlurSize = 15;
-    KeybindMode = 'All';
+    KeybindMode = 'Toggled';
     ShowCustomCursor = true; -- UE default
     KeybindMenuTransparency = 100; -- 0-100, UE-style (100 = fully opaque)
     -- Menu 3D background (ViewportFrame + rotating item)
@@ -1247,7 +1247,7 @@ do
             local State = KeyPicker:GetState();
             local displayKey = (KeyPicker.Value == 'None' or KeyPicker.Value == '' or KeyPicker.Value == '--') and '…' or KeyPicker.Value
             ContainerLabel.Text = string.format('[%s] %s (%s)', displayKey, Info.Text, KeyPicker.Mode);
-            local kbMode = Library.KeybindMode or 'All'
+            local kbMode = Library.KeybindMode or 'Toggled'
             if kbMode == 'Active' then
                 KeybindEntry.Visible = State == true
             elseif kbMode == 'Toggled' then
@@ -1279,8 +1279,9 @@ do
             local frameH = math.max(YSize + 23, 23)
             local frameW = math.max(XSize + 10 + 15, 210)
             Library.KeybindFrame.Size = UDim2.new(0, frameW, 0, frameH)
-            -- show list whenever toggle is on (even if only header)
-            Library.KeybindFrame.Visible = (Library.KeypickerListVisible ~= false)
+            -- hide keybind menu entirely until at least one bind entry is visible
+            local anyVisible = YSize > 0
+            Library.KeybindFrame.Visible = (Library.KeypickerListVisible ~= false) and anyVisible
         end;
         function KeyPicker:GetState()
             if KeyPicker.Mode == 'Always' then
@@ -3433,7 +3434,7 @@ end
         BorderColor3 = Color3.new(0, 0, 0);
         Position = UDim2.new(0, 10, 0.5, 0);
         Size = UDim2.new(0, 210, 0, 20);
-        Visible = true; -- UE: shown when KeypickerListVisible and has entries
+        Visible = false; -- hidden until at least one bind entry is visible
         ZIndex = 100;
         Parent = ScreenGui;
     });
@@ -3529,9 +3530,19 @@ function Library:RefreshKeybinds()
             pcall(function() kp:Update() end)
         end
     end
-    -- if no keybind entries updated size, still enforce visibility flag
-    if Library.KeypickerListVisible == false and Library.KeybindFrame then
-        Library.KeybindFrame.Visible = false
+    if Library.KeybindFrame and Library.KeybindContainer then
+        if Library.KeypickerListVisible == false then
+            Library.KeybindFrame.Visible = false
+        else
+            local anyVisible = false
+            for _, Frame in next, Library.KeybindContainer:GetChildren() do
+                if Frame:IsA('Frame') and Frame.Visible then
+                    anyVisible = true
+                    break
+                end
+            end
+            Library.KeybindFrame.Visible = anyVisible
+        end
     end
 end
 function Library:SetWatermarkVisibility(Bool)
@@ -3801,7 +3812,8 @@ function Library:CreateWindow(...)
         MenuViewport.CurrentCamera = MenuCam
     end
     pcall(function()
-        MenuCam.CFrame = CFrame.new(Vector3.new(0, 1.2, 6.5), Vector3.new(0, 0, 0))
+        MenuCam.CFrame = CFrame.new(Vector3.new(0, 0.5, 8), Vector3.new(0, 0, 0))
+        MenuCam.FieldOfView = 45
     end)
 
     -- WorldModel already inside cloned asset, or create empty
@@ -3889,55 +3901,77 @@ function Library:CreateWindow(...)
             local searchRoot = MenuWorld or MenuViewport
             local foundItem = searchRoot and searchRoot:FindFirstChild(name, true)
 
-            -- Fallback: build builtin model if asset has no named item
+            -- Only accept real geometry; ignore empty folders/models from asset
+            local function hasGeometry(obj)
+                if not obj then return false end
+                if obj:IsA('BasePart') then return true end
+                if obj:IsA('Model') then
+                    return obj:FindFirstChildWhichIsA('BasePart', true) ~= nil
+                end
+                return false
+            end
+            if foundItem and not hasGeometry(foundItem) then
+                foundItem = nil
+            end
+
+            -- Build / reuse builtin model (always works)
             if not foundItem and searchRoot then
-                local function makePart(props)
-                    local p = Instance.new('Part')
-                    p.Anchored = true
-                    p.CanCollide = false
-                    p.CastShadow = false
-                    p.Material = Enum.Material.Neon
-                    p.Color = Color3.new(1,1,1)
-                    if type(props) == 'table' then
-                        for k,v in pairs(props) do pcall(function() p[k]=v end) end
-                    end
-                    return p
-                end
-                local model = Instance.new('Model')
-                model.Name = name
-                local function add(part) part.Parent = model; return part end
-                if name == 'Sword' or name == 'Unnamed Enhancements' then
-                    add(makePart({ Size = Vector3.new(0.35, 4.2, 0.12), CFrame = CFrame.new(0, 0.8, 0) }))
-                    add(makePart({ Size = Vector3.new(0.28, 0.55, 0.12), CFrame = CFrame.new(0, 3.1, 0) }))
-                    add(makePart({ Size = Vector3.new(1.5, 0.22, 0.22), CFrame = CFrame.new(0, -1.35, 0) }))
-                    add(makePart({ Size = Vector3.new(0.28, 1.15, 0.28), CFrame = CFrame.new(0, -2.1, 0) }))
-                    add(makePart({ Size = Vector3.new(0.42, 0.35, 0.42), CFrame = CFrame.new(0, -2.8, 0), Shape = Enum.PartType.Ball }))
-                elseif name == 'Cross' or name == 'Catholic Cross' then
-                    add(makePart({ Size = Vector3.new(0.4, 3.4, 0.25), CFrame = CFrame.new(0, 0.2, 0) }))
-                    add(makePart({ Size = Vector3.new(2.0, 0.4, 0.25), CFrame = CFrame.new(0, 1.0, 0) }))
-                elseif name == 'Orthodox Cross' then
-                    add(makePart({ Size = Vector3.new(0.35, 3.5, 0.22), CFrame = CFrame.new(0, 0.15, 0) }))
-                    add(makePart({ Size = Vector3.new(1.8, 0.32, 0.22), CFrame = CFrame.new(0, 1.1, 0) }))
-                    add(makePart({ Size = Vector3.new(1.1, 0.26, 0.22), CFrame = CFrame.new(0, -0.85, 0) * CFrame.Angles(0, 0, math.rad(25)) }))
-                elseif name == 'Heart' then
-                    add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(-0.45, 0.45, 0) }))
-                    add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(0.45, 0.45, 0) }))
-                    add(makePart({ Size = Vector3.new(1.7, 1.4, 0.45), CFrame = CFrame.new(0, -0.4, 0) }))
+                -- reuse existing builtin with same name if present
+                local existing = searchRoot:FindFirstChild(name)
+                if existing and hasGeometry(existing) then
+                    foundItem = existing
                 else
-                    add(makePart({ Size = Vector3.new(1.8, 1.8, 1.8), CFrame = CFrame.Angles(math.rad(45), math.rad(45), 0) }))
+                    local function makePart(props)
+                        local p = Instance.new('Part')
+                        p.Anchored = true
+                        p.CanCollide = false
+                        p.CastShadow = false
+                        p.TopSurface = Enum.SurfaceType.Smooth
+                        p.BottomSurface = Enum.SurfaceType.Smooth
+                        p.Material = Enum.Material.Neon
+                        p.Color = Color3.new(1,1,1)
+                        if type(props) == 'table' then
+                            for k,v in pairs(props) do pcall(function() p[k]=v end) end
+                        end
+                        return p
+                    end
+                    local model = Instance.new('Model')
+                    model.Name = name
+                    local function add(part) part.Parent = model; return part end
+                    if name == 'Sword' or name == 'Unnamed Enhancements' then
+                        add(makePart({ Size = Vector3.new(0.35, 4.2, 0.12), CFrame = CFrame.new(0, 0.8, 0) }))
+                        add(makePart({ Size = Vector3.new(0.28, 0.55, 0.12), CFrame = CFrame.new(0, 3.1, 0) }))
+                        add(makePart({ Size = Vector3.new(1.5, 0.22, 0.22), CFrame = CFrame.new(0, -1.35, 0) }))
+                        add(makePart({ Size = Vector3.new(0.28, 1.15, 0.28), CFrame = CFrame.new(0, -2.1, 0) }))
+                        add(makePart({ Size = Vector3.new(0.42, 0.35, 0.42), CFrame = CFrame.new(0, -2.8, 0), Shape = Enum.PartType.Ball }))
+                    elseif name == 'Cross' or name == 'Catholic Cross' then
+                        add(makePart({ Size = Vector3.new(0.4, 3.4, 0.25), CFrame = CFrame.new(0, 0.2, 0) }))
+                        add(makePart({ Size = Vector3.new(2.0, 0.4, 0.25), CFrame = CFrame.new(0, 1.0, 0) }))
+                    elseif name == 'Orthodox Cross' then
+                        add(makePart({ Size = Vector3.new(0.35, 3.5, 0.22), CFrame = CFrame.new(0, 0.15, 0) }))
+                        add(makePart({ Size = Vector3.new(1.8, 0.32, 0.22), CFrame = CFrame.new(0, 1.1, 0) }))
+                        add(makePart({ Size = Vector3.new(1.1, 0.26, 0.22), CFrame = CFrame.new(0, -0.85, 0) * CFrame.Angles(0, 0, math.rad(25)) }))
+                    elseif name == 'Heart' then
+                        add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(-0.45, 0.45, 0) }))
+                        add(makePart({ Size = Vector3.new(1.15, 1.15, 0.45), Shape = Enum.PartType.Ball, CFrame = CFrame.new(0.45, 0.45, 0) }))
+                        add(makePart({ Size = Vector3.new(1.7, 1.4, 0.45), CFrame = CFrame.new(0, -0.4, 0) }))
+                    else
+                        add(makePart({ Size = Vector3.new(1.8, 1.8, 1.8), CFrame = CFrame.Angles(math.rad(45), math.rad(45), 0) }))
+                    end
+                    local first = model:FindFirstChildWhichIsA('BasePart')
+                    if first then model.PrimaryPart = first end
+                    model.Parent = searchRoot
+                    foundItem = model
                 end
-                local first = model:FindFirstChildWhichIsA('BasePart')
-                if first then model.PrimaryPart = first end
-                model.Parent = searchRoot
-                foundItem = model
             end
 
             if foundItem ~= MenuBgState.Item then
                 hideItem(MenuBgState.Item)
                 if foundItem then
+                    -- UE-style start pose: slightly back and angled
                     local startCFrame = CFrame.new(0, 0, 0)
                     if name == "Unnamed Enhancements" or name == "Sword" then
-                        startCFrame = CFrame.Angles(math.rad(-35), math.rad(25), 0)
+                        startCFrame = CFrame.Angles(math.rad(-40), math.rad(20), 0)
                     end
                     if foundItem:IsA("Model") then
                         pcall(function() foundItem:PivotTo(startCFrame) end)
