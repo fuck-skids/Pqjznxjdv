@@ -3753,6 +3753,7 @@ function Library:CreateWindow(...)
         Viewport = nil;
         World = nil;
         SourceRoot = nil; -- WorldModel or Viewport holding named items from asset
+        SourceAsset = nil; -- keep the original asset root alive for its camera
     }
     Library.MenuBackground = MenuBgState
 
@@ -3823,8 +3824,22 @@ function Library:CreateWindow(...)
         MenuViewport = innerViewport
         MenuWorld = innerViewport
         MenuBgFrame = outerFrame
-        pcall(function() root:Destroy() end)
+        -- Keep the original asset root alive. Its ViewportFrame may use a
+        -- Camera or other supporting instances stored outside outerFrame.
+        -- Destroying root here can silently invalidate CurrentCamera and
+        -- leave every selected model invisible.
+        MenuBgState.SourceAsset = root
         MenuBgState.SourceRoot = innerViewport
+
+        -- Preserve the asset camera if it is stored outside the moved frame.
+        pcall(function()
+            if not innerViewport.CurrentCamera then
+                local camera = root:FindFirstChildWhichIsA("Camera", true)
+                if camera then
+                    innerViewport.CurrentCamera = camera
+                end
+            end
+        end)
     end)
 
     MenuBgState.Viewport = MenuViewport
