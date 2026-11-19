@@ -419,12 +419,6 @@ local ThemeManager = {} do
 			if Options.Brightness then L.Brightness = Options.Brightness.Value end
 			if type(L.UpdateColorCorrection) == 'function' then
 				pcall(function() L:UpdateColorCorrection() end)
-			elseif L.ColorCorrection then
-				pcall(function()
-					L.ColorCorrection.Contrast = L.Contrast or 0
-					L.ColorCorrection.Saturation = L.Saturation or 0
-					L.ColorCorrection.Brightness = L.Brightness or 0
-				end)
 			end
 			if type(L.RefreshMenuBackgroundStyle) == 'function' then
 				pcall(function() L:RefreshMenuBackgroundStyle() end)
