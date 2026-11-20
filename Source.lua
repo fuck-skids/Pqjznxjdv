@@ -3726,14 +3726,30 @@ function Library:CreateWindow(...)
 
     -- ============================================================
     -- Menu 3D background — models from UE asset rbxassetid://93615626116769
+    -- Separate ScreenGui (DisplayOrder 2) so it stays visible when
+    -- Outer.Visible = false (menu closed). Enabled mirrors menu state.
     -- ============================================================
-    local MenuBgHolder = Library:Create('Frame', {
-        BackgroundTransparency = 1;
-        Size = UDim2.fromScale(1, 1);
-        ZIndex = 0;
-        ClipsDescendants = true;
-        Parent = Outer;
-    });
+    local BgScreenGui = Instance.new('ScreenGui')
+    BgScreenGui.Name = 'MenuBackground'
+    BgScreenGui.ResetOnSpawn = false
+    BgScreenGui.DisplayOrder = 2
+    BgScreenGui.IgnoreGuiInset = true
+    BgScreenGui.Enabled = false  -- starts hidden; Toggle() enables it
+    BgScreenGui.Parent = ScreenGui.Parent
+
+    local MenuBgHolder = Instance.new('Frame')
+    MenuBgHolder.BackgroundTransparency = 1
+    MenuBgHolder.Size = UDim2.fromScale(1, 1)
+    MenuBgHolder.ZIndex = 0
+    MenuBgHolder.ClipsDescendants = true
+    MenuBgHolder.Parent = BgScreenGui
+    Library.BgScreenGui = BgScreenGui
+    -- Destroy BgScreenGui when library unloads
+    local _origUnload = Library._UnloadCallback
+    Library._UnloadCallback = function()
+        pcall(function() BgScreenGui:Destroy() end)
+        if _origUnload then _origUnload() end
+    end
 
     Library.ItemType = Library.ItemType or "Unnamed Enhancements"
     Library.BackColor = Library.BackColor or Color3.new(0, 0, 0)
@@ -3804,6 +3820,28 @@ function Library:CreateWindow(...)
         if not srcVF then return end
 
         -- Copy every Model / BasePart from asset VF (and nested WorldModel) into ours
+        -- Also register each BasePart in the Library registry so theme updates
+        -- (SwordColor, SwordTransparency, SwordReflectance, SwordMaterial) apply live.
+        local partRegistryProps = {
+            Color       = 'SwordColor';
+            Transparency = 'SwordTransparency';
+            Reflectance  = 'SwordReflectance';
+            Material     = 'SwordMaterial';
+        }
+        local function registerParts(obj)
+            if not obj then return end
+            pcall(function()
+                if obj:IsA("BasePart") then
+                    Library:AddToRegistry(obj, partRegistryProps)
+                else
+                    for _, d in ipairs(obj:GetDescendants()) do
+                        if d:IsA("BasePart") then
+                            Library:AddToRegistry(d, partRegistryProps)
+                        end
+                    end
+                end
+            end)
+        end
         local function absorb(container)
             local kids = {}
             for _, ch in ipairs(container:GetChildren()) do
@@ -3824,6 +3862,8 @@ function Library:CreateWindow(...)
                             end
                         end)
                         cl.Parent = MenuWorld
+                        -- register parts in the theme registry for live updates
+                        registerParts(cl)
                     end
                 end
             end
@@ -3840,6 +3880,7 @@ function Library:CreateWindow(...)
         Library:AddToRegistry(MenuViewport, {
             BackgroundColor3 = 'BackColor';
             BackgroundTransparency = 'BackTransparency';
+            ImageColor3 = 'SwordColor';
         })
     end)
 
@@ -3954,7 +3995,12 @@ function Library:CreateWindow(...)
 
     function Library:SetMenuBackgroundEnabled(on)
         MenuBgState.Enabled = on and true or false
-        MenuBgHolder.Visible = MenuBgState.Enabled
+        -- BgScreenGui is only shown when both menu is open AND background is enabled
+        pcall(function()
+            if Library.BgScreenGui then
+                Library.BgScreenGui.Enabled = MenuBgState.Enabled and (Library.Toggled == true)
+            end
+        end)
         if not MenuBgState.Enabled then
             hideItem(MenuBgState.Item)
             MenuBgState.Item = nil
@@ -4512,6 +4558,12 @@ function Library:CreateWindow(...)
         Library.Toggled = not Library.Toggled;
         ModalElement.Modal = Library.Toggled;
         Outer.Visible = Library.Toggled;
+        -- Background lives in its own ScreenGui — show/hide with menu
+        pcall(function()
+            if Library.BgScreenGui and Library.MenuBackground then
+                Library.BgScreenGui.Enabled = Library.Toggled and (Library.MenuBackground.Enabled ~= false)
+            end
+        end)
         -- Custom cursor — exact UE follow logic
         if Library.Toggled and not Library.CursorLoopRunning then
             Library.CursorLoopRunning = true
