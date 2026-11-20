@@ -12,6 +12,7 @@ local ProtectGui = protectgui or (syn and syn.protect_gui) or (function() end);
 local ScreenGui = Instance.new('ScreenGui');
 ProtectGui(ScreenGui);
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;
+ScreenGui.DisplayOrder = 10;  -- above background (DisplayOrder 2)
 ScreenGui.Parent = CoreGui;
 local Toggles = {};
 local Options = {};
@@ -3732,16 +3733,18 @@ function Library:CreateWindow(...)
     local BgScreenGui = Instance.new('ScreenGui')
     BgScreenGui.Name = 'MenuBackground'
     BgScreenGui.ResetOnSpawn = false
-    BgScreenGui.DisplayOrder = 2
+    BgScreenGui.DisplayOrder = 2   -- below main ScreenGui (DisplayOrder 10)
     BgScreenGui.IgnoreGuiInset = true
-    BgScreenGui.Enabled = false  -- starts hidden; Toggle() enables it
+    BgScreenGui.Enabled = false    -- starts hidden; Toggle() enables it
     BgScreenGui.Parent = ScreenGui.Parent
 
+    -- Full-screen holder, no clipping so viewport fills entire screen
     local MenuBgHolder = Instance.new('Frame')
     MenuBgHolder.BackgroundTransparency = 1
     MenuBgHolder.Size = UDim2.fromScale(1, 1)
+    MenuBgHolder.Position = UDim2.fromScale(0, 0)
     MenuBgHolder.ZIndex = 0
-    MenuBgHolder.ClipsDescendants = true
+    MenuBgHolder.ClipsDescendants = false
     MenuBgHolder.Parent = BgScreenGui
     Library.BgScreenGui = BgScreenGui
     -- Destroy BgScreenGui when library unloads
@@ -3775,15 +3778,16 @@ function Library:CreateWindow(...)
     local MenuViewport = Library:Create('ViewportFrame', {
         BackgroundColor3 = Library.BackColor;
         BackgroundTransparency = Library.BackTransparency;
+        -- Full screen: cover entire BgScreenGui
         Size = UDim2.fromScale(1, 1);
+        Position = UDim2.fromScale(0, 0);
+        AnchorPoint = Vector2.new(0, 0);
         ZIndex = 0;
         LightColor = Color3.fromRGB(255, 255, 255);
-        LightDirection = Vector3.new(-1, -1, -1);
-        Ambient = Color3.fromRGB(200, 200, 200);
+        LightDirection = Vector3.new(-1, -2, -1);
+        Ambient = Color3.fromRGB(180, 180, 180);
         Parent = MenuBgHolder;
     })
-    -- fix typo if any
-    pcall(function() MenuViewport.LightColor = Color3.fromRGB(255,255,255) end)
 
     local MenuWorld = Instance.new('WorldModel')
     MenuWorld.Name = 'WorldModel'
@@ -3792,9 +3796,10 @@ function Library:CreateWindow(...)
     local MenuCam = Instance.new('Camera')
     MenuCam.Parent = MenuViewport
     MenuViewport.CurrentCamera = MenuCam
-    -- UE places items near CFrame.new(0,10,10); camera looks toward that area
-    MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
-    MenuCam.FieldOfView = 50
+    -- Camera from UeButBetter: positioned behind+above, looking at item at (0,10,10)
+    -- Slight downward angle matches the original look
+    MenuCam.CFrame = CFrame.new(Vector3.new(0, 13, 22), Vector3.new(0, 9, 10))
+    MenuCam.FieldOfView = 45
 
     -- Load UE asset and pull named items into our WorldModel
     pcall(function()
@@ -4094,6 +4099,31 @@ function Library:CreateWindow(...)
         elseif activeItem:IsA("BasePart") then
             activeItem.CFrame = activeItem.CFrame * rotationStep
         end
+
+        -- Track item position to follow the UI window (item appears behind Outer)
+        pcall(function()
+            local vp = MenuViewport
+            local vpSize = vp.AbsoluteSize
+            if vpSize.X <= 0 or vpSize.Y <= 0 then return end
+
+            -- Center of UI window in screen-space (0..1)
+            local outerPos = Outer.AbsolutePosition
+            local outerSize = Outer.AbsoluteSize
+            local uiCenterX = (outerPos.X + outerSize.X * 0.5) / vpSize.X
+            local uiCenterY = (outerPos.Y + outerSize.Y * 0.5) / vpSize.Y
+
+            -- Map screen center offset to world X/Y offset
+            -- Screen center = (0.5, 0.5); deviation shifts item 0..12 studs
+            local offsetX = (uiCenterX - 0.5) * 24
+            local offsetY = -(uiCenterY - 0.5) * 14  -- inverted Y
+
+            -- Keep Z depth, adjust X/Y so item appears behind UI
+            local itemBase = Vector3.new(offsetX, 9 + offsetY, 10)
+            MenuCam.CFrame = CFrame.new(
+                Vector3.new(offsetX, 13 + offsetY, 22),
+                itemBase
+            )
+        end)
     end)
 
     if MenuBgState.Enabled then
