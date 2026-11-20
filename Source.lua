@@ -12,7 +12,7 @@ local ProtectGui = protectgui or (syn and syn.protect_gui) or (function() end);
 local ScreenGui = Instance.new('ScreenGui');
 ProtectGui(ScreenGui);
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global;
-ScreenGui.DisplayOrder = 10;  -- above background (DisplayOrder 2)
+ScreenGui.DisplayOrder = 20;  -- UeButBetter: main GUI at 20, background at 2
 ScreenGui.Parent = CoreGui;
 local Toggles = {};
 local Options = {};
@@ -3726,34 +3726,10 @@ function Library:CreateWindow(...)
     Outer.ClipsDescendants = true;
 
     -- ============================================================
-    -- Menu 3D background — models from UE asset rbxassetid://93615626116769
-    -- Separate ScreenGui (DisplayOrder 2) so it stays visible when
-    -- Outer.Visible = false (menu closed). Enabled mirrors menu state.
+    -- Menu 3D background — exact UeButBetter approach:
+    -- Use the asset ScreenGui (rbxassetid://93615626116769) directly,
+    -- DisplayOrder 2 (below main GUI at 20). Enabled = windowVisible.
     -- ============================================================
-    local BgScreenGui = Instance.new('ScreenGui')
-    BgScreenGui.Name = 'MenuBackground'
-    BgScreenGui.ResetOnSpawn = false
-    BgScreenGui.DisplayOrder = 2   -- below main ScreenGui (DisplayOrder 10)
-    BgScreenGui.IgnoreGuiInset = true
-    BgScreenGui.Enabled = false    -- starts hidden; Toggle() enables it
-    BgScreenGui.Parent = ScreenGui.Parent
-
-    -- Full-screen holder, no clipping so viewport fills entire screen
-    local MenuBgHolder = Instance.new('Frame')
-    MenuBgHolder.BackgroundTransparency = 1
-    MenuBgHolder.Size = UDim2.fromScale(1, 1)
-    MenuBgHolder.Position = UDim2.fromScale(0, 0)
-    MenuBgHolder.ZIndex = 0
-    MenuBgHolder.ClipsDescendants = false
-    MenuBgHolder.Parent = BgScreenGui
-    Library.BgScreenGui = BgScreenGui
-    -- Destroy BgScreenGui when library unloads
-    local _origUnload = Library._UnloadCallback
-    Library._UnloadCallback = function()
-        pcall(function() BgScreenGui:Destroy() end)
-        if _origUnload then _origUnload() end
-    end
-
     Library.ItemType = Library.ItemType or "Unnamed Enhancements"
     Library.BackColor = Library.BackColor or Color3.new(0, 0, 0)
     Library.BackTransparency = Library.BackTransparency or 0.7
@@ -3771,123 +3747,151 @@ function Library:CreateWindow(...)
         Conn = nil;
         Viewport = nil;
         World = nil;
-        SourceRoot = nil; -- WorldModel or Viewport holding named items from asset
     }
     Library.MenuBackground = MenuBgState
 
-    local MenuViewport = Library:Create('ViewportFrame', {
-        BackgroundColor3 = Library.BackColor;
-        BackgroundTransparency = Library.BackTransparency;
-        -- Full screen: cover entire BgScreenGui
-        Size = UDim2.fromScale(1, 1);
-        Position = UDim2.fromScale(0, 0);
-        AnchorPoint = Vector2.new(0, 0);
-        ZIndex = 0;
-        LightColor = Color3.fromRGB(255, 255, 255);
-        LightDirection = Vector3.new(-1, -2, -1);
-        Ambient = Color3.fromRGB(180, 180, 180);
-        Parent = MenuBgHolder;
-    })
-
+    -- Load asset — it IS a ScreenGui with a full-screen ViewportFrame inside
+    local BgScreenGui = nil
+    local MenuViewport = nil
     local MenuWorld = Instance.new('WorldModel')
     MenuWorld.Name = 'WorldModel'
-    MenuWorld.Parent = MenuViewport
-
     local MenuCam = Instance.new('Camera')
-    MenuCam.Parent = MenuViewport
-    MenuViewport.CurrentCamera = MenuCam
-    -- Camera from UeButBetter: positioned behind+above, looking at item at (0,10,10)
-    -- Slight downward angle matches the original look
-    MenuCam.CFrame = CFrame.new(Vector3.new(0, 13, 22), Vector3.new(0, 9, 10))
-    MenuCam.FieldOfView = 45
 
-    -- Load UE asset and pull named items into our WorldModel
     pcall(function()
         local objs = game:GetObjects("rbxassetid://93615626116769")
         local root = objs and objs[1]
         if not root then return end
 
-        -- UE structure: root.ViewportFrame.ViewportFrame (inner VF with models)
-        local outerVF = root:FindFirstChild("ViewportFrame", true)
-        local innerVF = outerVF and (outerVF:FindFirstChildWhichIsA("ViewportFrame") or outerVF:FindFirstChild("ViewportFrame"))
-        local srcVF = nil
-        if innerVF and innerVF:IsA("ViewportFrame") then
-            srcVF = innerVF
-        elseif outerVF and outerVF:IsA("ViewportFrame") then
-            srcVF = outerVF
+        -- UeButBetter: root itself is the ScreenGui (DisplayOrder 2)
+        if root:IsA("ScreenGui") then
+            BgScreenGui = root
+        else
+            -- fallback: wrap in new ScreenGui
+            BgScreenGui = Instance.new('ScreenGui')
+            root.Parent = BgScreenGui
         end
-        if not srcVF then
-            -- search any ViewportFrame
-            for _, d in ipairs(root:GetDescendants()) do
-                if d:IsA("ViewportFrame") then srcVF = d; break end
-            end
-        end
-        if not srcVF then return end
+        BgScreenGui.DisplayOrder = 2
+        BgScreenGui.ResetOnSpawn = false
+        BgScreenGui.Enabled = false
+        ProtectGui(BgScreenGui)
+        BgScreenGui.Parent = ScreenGui.Parent
 
-        -- Copy every Model / BasePart from asset VF (and nested WorldModel) into ours
-        -- Also register each BasePart in the Library registry so theme updates
-        -- (SwordColor, SwordTransparency, SwordReflectance, SwordMaterial) apply live.
+        -- The ViewportFrame is root.ViewportFrame (outer), inner is .ViewportFrame.ViewportFrame
+        local outerVF = BgScreenGui:FindFirstChildWhichIsA("ViewportFrame")
+            or BgScreenGui:FindFirstChild("ViewportFrame", true)
+        if not outerVF then return end
+
+        -- The inner VF holds the 3D models; use it directly as MenuViewport
+        local innerVF = outerVF:FindFirstChildWhichIsA("ViewportFrame")
+            or outerVF:FindFirstChild("ViewportFrame")
+
+        -- Use outer VF as the display viewport (full-screen, has BackgroundColor)
+        MenuViewport = outerVF
+        MenuViewport.BackgroundColor3 = Library.BackColor
+        MenuViewport.BackgroundTransparency = Library.BackTransparency
+
+        -- Move WorldModel and Camera into the inner VF (where models live) or outer VF
+        local targetVF = innerVF or outerVF
+        MenuWorld.Parent = targetVF
+        MenuCam.Parent = targetVF
+        targetVF.CurrentCamera = MenuCam
+        -- UeButBetter camera: fixed, centered, slight downward look
+        MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
+        MenuCam.FieldOfView = 50
+
+        -- Register viewport for theme colors
+        Library:AddToRegistry(outerVF, {
+            BackgroundColor3 = 'BackColor';
+            BackgroundTransparency = 'BackTransparency';
+        })
+        if innerVF then
+            Library:AddToRegistry(innerVF, { ImageColor3 = 'SwordColor' })
+        end
+
+        -- Pull all named 3D models from asset into our WorldModel
         local partRegistryProps = {
-            Color       = 'SwordColor';
+            Color        = 'SwordColor';
             Transparency = 'SwordTransparency';
             Reflectance  = 'SwordReflectance';
             Material     = 'SwordMaterial';
         }
         local function registerParts(obj)
-            if not obj then return end
             pcall(function()
                 if obj:IsA("BasePart") then
                     Library:AddToRegistry(obj, partRegistryProps)
-                else
-                    for _, d in ipairs(obj:GetDescendants()) do
-                        if d:IsA("BasePart") then
-                            Library:AddToRegistry(d, partRegistryProps)
-                        end
+                end
+                for _, d in ipairs(obj:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        Library:AddToRegistry(d, partRegistryProps)
                     end
                 end
             end)
         end
+        local srcVF = innerVF or outerVF
         local function absorb(container)
-            local kids = {}
             for _, ch in ipairs(container:GetChildren()) do
-                table.insert(kids, ch)
-            end
-            for _, ch in ipairs(kids) do
                 if ch:IsA("WorldModel") then
                     absorb(ch)
                 elseif ch:IsA("Model") or ch:IsA("BasePart") then
-                    local okc, cl = pcall(function() return ch:Clone() end)
-                    if okc and cl then
-                        -- park far away initially (UE hide)
+                    local ok, cl = pcall(function() return ch:Clone() end)
+                    if ok and cl then
                         pcall(function()
-                            if cl:IsA("Model") then
-                                cl:PivotTo(CFrame.new(0, 1000, 0))
-                            else
-                                cl.CFrame = CFrame.new(0, 1000, 0)
-                            end
+                            if cl:IsA("Model") then cl:PivotTo(CFrame.new(0, 1000, 0))
+                            else cl.CFrame = CFrame.new(0, 1000, 0) end
                         end)
                         cl.Parent = MenuWorld
-                        -- register parts in the theme registry for live updates
                         registerParts(cl)
                     end
                 end
             end
         end
         absorb(srcVF)
-        MenuBgState.SourceRoot = MenuWorld
     end)
 
-    MenuBgState.Viewport = MenuViewport
-    MenuBgState.World = MenuWorld
-    Library.MenuViewport = MenuViewport
+    -- Fallback: if asset failed to load, create our own ScreenGui + ViewportFrame
+    if not BgScreenGui then
+        BgScreenGui = Instance.new('ScreenGui')
+        BgScreenGui.Name = 'MenuBackground'
+        BgScreenGui.ResetOnSpawn = false
+        BgScreenGui.DisplayOrder = 2
+        BgScreenGui.IgnoreGuiInset = true
+        BgScreenGui.Enabled = false
+        BgScreenGui.Parent = ScreenGui.Parent
 
-    pcall(function()
+        MenuViewport = Instance.new('ViewportFrame')
+        MenuViewport.BackgroundColor3 = Library.BackColor
+        MenuViewport.BackgroundTransparency = Library.BackTransparency
+        MenuViewport.Size = UDim2.fromScale(1, 1)
+        MenuViewport.Position = UDim2.fromScale(0, 0)
+        MenuViewport.LightColor = Color3.fromRGB(255, 255, 255)
+        MenuViewport.LightDirection = Vector3.new(-1, -1, -1)
+        MenuViewport.Ambient = Color3.fromRGB(200, 200, 200)
+        MenuViewport.Parent = BgScreenGui
+
+        MenuWorld.Parent = MenuViewport
+        MenuCam.Parent = MenuViewport
+        MenuViewport.CurrentCamera = MenuCam
+        MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
+        MenuCam.FieldOfView = 50
+
         Library:AddToRegistry(MenuViewport, {
             BackgroundColor3 = 'BackColor';
             BackgroundTransparency = 'BackTransparency';
             ImageColor3 = 'SwordColor';
         })
-    end)
+    end
+
+    -- Destroy BgScreenGui on unload
+    local _origUnload = Library._UnloadCallback
+    Library._UnloadCallback = function()
+        pcall(function() BgScreenGui:Destroy() end)
+        if _origUnload then _origUnload() end
+    end
+
+    Library.BgScreenGui = BgScreenGui
+    MenuBgState.Viewport = MenuViewport
+    MenuBgState.World = MenuWorld
+    Library.MenuViewport = MenuViewport
 
     local function stylePart(p)
         if not p or not p:IsA("BasePart") then return end
