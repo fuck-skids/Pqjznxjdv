@@ -3755,7 +3755,7 @@ function Library:CreateWindow(...)
     local MenuViewport = nil
     local MenuWorld = Instance.new('WorldModel')
     MenuWorld.Name = 'WorldModel'
-    local MenuCam = Instance.new('Camera')
+    local MenuCam = nil  -- will be taken from asset, not created manually
 
     pcall(function()
         local objs = game:GetObjects("rbxassetid://93615626116769")
@@ -3766,7 +3766,6 @@ function Library:CreateWindow(...)
         if root:IsA("ScreenGui") then
             BgScreenGui = root
         else
-            -- fallback: wrap in new ScreenGui
             BgScreenGui = Instance.new('ScreenGui')
             root.Parent = BgScreenGui
         end
@@ -3776,28 +3775,35 @@ function Library:CreateWindow(...)
         ProtectGui(BgScreenGui)
         BgScreenGui.Parent = ScreenGui.Parent
 
-        -- The ViewportFrame is root.ViewportFrame (outer), inner is .ViewportFrame.ViewportFrame
+        -- outer VF = full-screen background viewport
+        -- inner VF = .ViewportFrame inside outer = holds the 3D models + camera
         local outerVF = BgScreenGui:FindFirstChildWhichIsA("ViewportFrame")
             or BgScreenGui:FindFirstChild("ViewportFrame", true)
         if not outerVF then return end
 
-        -- The inner VF holds the 3D models; use it directly as MenuViewport
         local innerVF = outerVF:FindFirstChildWhichIsA("ViewportFrame")
             or outerVF:FindFirstChild("ViewportFrame")
 
-        -- Use outer VF as the display viewport (full-screen, has BackgroundColor)
         MenuViewport = outerVF
         MenuViewport.BackgroundColor3 = Library.BackColor
         MenuViewport.BackgroundTransparency = Library.BackTransparency
 
-        -- Move WorldModel and Camera into the inner VF (where models live) or outer VF
+        -- Use the asset's existing camera (already has correct CFrame/FOV from UeButBetter)
         local targetVF = innerVF or outerVF
+        local assetCam = targetVF:FindFirstChildWhichIsA("Camera")
+        if assetCam then
+            MenuCam = assetCam  -- keep asset camera as-is (correct angle/FOV)
+        else
+            -- fallback: create camera only if asset had none
+            MenuCam = Instance.new('Camera')
+            MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
+            MenuCam.FieldOfView = 50
+            MenuCam.Parent = targetVF
+            targetVF.CurrentCamera = MenuCam
+        end
+
+        -- Place our WorldModel into the same VF as the camera
         MenuWorld.Parent = targetVF
-        MenuCam.Parent = targetVF
-        targetVF.CurrentCamera = MenuCam
-        -- UeButBetter camera: fixed, centered, slight downward look
-        MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
-        MenuCam.FieldOfView = 50
 
         -- Register viewport for theme colors
         Library:AddToRegistry(outerVF, {
@@ -3869,10 +3875,11 @@ function Library:CreateWindow(...)
         MenuViewport.Parent = BgScreenGui
 
         MenuWorld.Parent = MenuViewport
-        MenuCam.Parent = MenuViewport
-        MenuViewport.CurrentCamera = MenuCam
+        MenuCam = Instance.new('Camera')
         MenuCam.CFrame = CFrame.new(Vector3.new(0, 10, 18), Vector3.new(0, 10, 10))
         MenuCam.FieldOfView = 50
+        MenuCam.Parent = MenuViewport
+        MenuViewport.CurrentCamera = MenuCam
 
         Library:AddToRegistry(MenuViewport, {
             BackgroundColor3 = 'BackColor';
