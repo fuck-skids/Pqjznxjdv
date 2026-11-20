@@ -3862,53 +3862,6 @@ function Library:CreateWindow(...)
             end
         end
         absorb(srcVF)
-
-        -- Inject custom "Monoflux" item (MF logo) into WorldModel
-        -- To use your own logo: replace MONOFLUX_ASSET_ID with your Roblox decal asset ID
-        local MONOFLUX_ASSET_ID = "" -- e.g. "rbxassetid://YOUR_DECAL_ID_HERE"
-        pcall(function()
-            local mfPart = Instance.new("Part")
-            mfPart.Name = "Monoflux"
-            mfPart.Anchored = true
-            mfPart.CanCollide = false
-            mfPart.CastShadow = false
-            mfPart.Size = Vector3.new(4, 4, 0.1)
-            mfPart.Color = Color3.new(0, 0, 0)
-            mfPart.Material = Enum.Material.Neon
-            mfPart.Transparency = 0
-            mfPart.CFrame = CFrame.new(0, 1000, 0)
-
-            if MONOFLUX_ASSET_ID ~= "" then
-                -- Use uploaded logo decal
-                local decal = Instance.new("Decal")
-                decal.Texture = MONOFLUX_ASSET_ID
-                decal.Face = Enum.NormalId.Front
-                decal.Parent = mfPart
-                local decalBack = Instance.new("Decal")
-                decalBack.Texture = MONOFLUX_ASSET_ID
-                decalBack.Face = Enum.NormalId.Back
-                decalBack.Parent = mfPart
-            else
-                -- Fallback: render "MF" text via SurfaceGui
-                local sg = Instance.new("SurfaceGui")
-                sg.Face = Enum.NormalId.Front
-                sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-                sg.PixelsPerStud = 100
-                sg.AlwaysOnTop = false
-                sg.Parent = mfPart
-                local lbl = Instance.new("TextLabel")
-                lbl.Size = UDim2.fromScale(1, 1)
-                lbl.BackgroundColor3 = Color3.new(0, 0, 0)
-                lbl.BackgroundTransparency = 0
-                lbl.Text = "MF"
-                lbl.TextColor3 = Color3.new(1, 1, 1)
-                lbl.TextScaled = true
-                lbl.Font = Enum.Font.GothamBold
-                lbl.Parent = sg
-            end
-
-            mfPart.Parent = MenuWorld
-        end)
     end)
 
     -- Fallback: if asset failed to load, create our own ScreenGui + ViewportFrame
