@@ -3846,6 +3846,16 @@ function Library:CreateWindow(...)
                             else cl.CFrame = CFrame.new(0, 1000, 0) end
                         end)
                         cl.Parent = MenuWorld
+                        -- Scale down 3x to match UeButBetter item size
+                        pcall(function()
+                            if cl:IsA("Model") then
+                                local cf = cl:GetPivot()
+                                cl:ScaleTo(1/3)
+                                cl:PivotTo(cf)
+                            elseif cl:IsA("BasePart") then
+                                cl.Size = cl.Size / 3
+                            end
+                        end)
                         registerParts(cl)
                     end
                 end
@@ -3975,9 +3985,6 @@ function Library:CreateWindow(...)
 
                 if foundItem then
                     local startCFrame = CFrame.new(0, 10, 10)
-                    if name == "Unnamed Enhancements" then
-                        startCFrame = startCFrame * CFrame.Angles(math.rad(-40), 0, 0)
-                    end
                     if foundItem:IsA("Model") then
                         foundItem:PivotTo(startCFrame)
                     elseif foundItem:IsA("BasePart") then
