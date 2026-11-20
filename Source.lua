@@ -3846,14 +3846,14 @@ function Library:CreateWindow(...)
                             else cl.CFrame = CFrame.new(0, 1000, 0) end
                         end)
                         cl.Parent = MenuWorld
-                        -- Scale down 3x to match UeButBetter item size
+                        -- Scale down 2x
                         pcall(function()
                             if cl:IsA("Model") then
                                 local cf = cl:GetPivot()
-                                cl:ScaleTo(1/3)
+                                cl:ScaleTo(1/2)
                                 cl:PivotTo(cf)
                             elseif cl:IsA("BasePart") then
-                                cl.Size = cl.Size / 3
+                                cl.Size = cl.Size / 2
                             end
                         end)
                         registerParts(cl)
