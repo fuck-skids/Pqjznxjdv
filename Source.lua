@@ -4104,30 +4104,6 @@ function Library:CreateWindow(...)
             activeItem.CFrame = activeItem.CFrame * rotationStep
         end
 
-        -- Track item position to follow the UI window (item appears behind Outer)
-        pcall(function()
-            local vp = MenuViewport
-            local vpSize = vp.AbsoluteSize
-            if vpSize.X <= 0 or vpSize.Y <= 0 then return end
-
-            -- Center of UI window in screen-space (0..1)
-            local outerPos = Outer.AbsolutePosition
-            local outerSize = Outer.AbsoluteSize
-            local uiCenterX = (outerPos.X + outerSize.X * 0.5) / vpSize.X
-            local uiCenterY = (outerPos.Y + outerSize.Y * 0.5) / vpSize.Y
-
-            -- Map screen center offset to world X/Y offset
-            -- Screen center = (0.5, 0.5); deviation shifts item 0..12 studs
-            local offsetX = (uiCenterX - 0.5) * 24
-            local offsetY = -(uiCenterY - 0.5) * 14  -- inverted Y
-
-            -- Keep Z depth, adjust X/Y so item appears behind UI
-            local itemBase = Vector3.new(offsetX, 9 + offsetY, 10)
-            MenuCam.CFrame = CFrame.new(
-                Vector3.new(offsetX, 13 + offsetY, 22),
-                itemBase
-            )
-        end)
     end)
 
     if MenuBgState.Enabled then
