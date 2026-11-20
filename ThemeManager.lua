@@ -291,6 +291,7 @@ local ThemeManager = {} do
 					'Catholic Cross',
 					'Orthodox Cross',
 					'Unnamed Enhancements',
+					'Monoflux',
 				},
 				Default = 'Unnamed Enhancements',
 				Multi = false,
